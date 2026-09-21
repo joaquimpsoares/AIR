@@ -1,0 +1,2 @@
+set transition expenses.finance_approve when="amount<=10000" was_when=<absent>
+add transition expenses.finance_approve_high from=FinanceReview to=Approved action=approve by=role:finance when="amount>10000" separate=employee comment=optional approvals=2 distinct=true event=finance_approved

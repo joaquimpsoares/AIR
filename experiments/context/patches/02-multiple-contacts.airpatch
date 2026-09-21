@@ -1,0 +1,6 @@
+add resource contacts
+add field contacts.name text required
+add field contacts.email email
+add field contacts.customer ref=customers required
+add manage contacts
+add access contacts view=role:admin|owner:customer.account_manager create=role:admin|owner:customer.account_manager edit=role:admin|owner:customer.account_manager delete=role:admin|owner:customer.account_manager

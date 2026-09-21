@@ -1,0 +1,1 @@
+set access customers archive=role:admin was_archive=role:admin|owner:account_manager

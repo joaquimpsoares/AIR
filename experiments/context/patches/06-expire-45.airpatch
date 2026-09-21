@@ -1,0 +1,1 @@
+set rule customers.expire after=45d was_after=30d

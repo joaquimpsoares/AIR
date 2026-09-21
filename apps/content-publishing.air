@@ -1,0 +1,23 @@
+air version=2
+app content_publishing title="Content Publishing"
+resource users label=name
+field users.name text required
+actor users
+manage users create=admin edit=admin delete=admin
+access users view=true edit=role:admin|self
+resource articles label=title
+field articles.title text required
+field articles.author ref=users required
+field articles.category enum values=Standard,Regulated required
+field articles.state enum values=Draft,EditorialReview,LegalReview,Published
+field articles.updated date required default=today
+manage articles delete=false
+access articles view=true create=owner:author edit=owner:author delete=false archive=false
+process articles state=state initial=Draft terminal=Published history touch=updated
+transition articles.submit from=Draft to=EditorialReview action=submit by=owner:author event=submitted
+transition articles.editor_publish from=EditorialReview to=Published action=approve by=role:editor when=category==Standard separate=author comment=optional event=published
+transition articles.editor_legal from=EditorialReview to=LegalReview action=approve by=role:editor when=category==Regulated separate=author comment=optional event=editor_approved
+transition articles.legal_publish from=LegalReview to=Published action=approve by=role:legal separate=author comment=optional event=published
+invariant articles.in_review when="state==EditorialReview|state==LegalReview" immutable=*
+invariant articles.published when=state==Published immutable=*
+overview

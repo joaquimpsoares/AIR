@@ -1,0 +1,26 @@
+air version=2
+app customer_manager title="Northstar CRM" subtitle="Customer relationships, without the busywork" initial=overview
+theme mode=dark accent=violet
+capability storage.local
+resource account_managers label=name
+field account_managers.name text required
+field account_managers.email email required unique
+actor account_managers
+manage account_managers create=admin edit=admin delete=admin
+access account_managers view=role:admin|self edit=role:admin|self
+resource customers
+field customers.name text required min=2
+field customers.email email required unique
+field customers.phone phone
+field customers.company text
+field customers.vat_number text label="VAT Number"
+field customers.account_manager ref=account_managers required
+field customers.status enum values=Active,Trial,Inactive default=Trial
+field customers.joined date required default=today
+field customers.notes text long
+field customers.monthly_revenue money currency=USD default=0
+manage customers lifecycle=archive
+access customers view=role:admin|owner:account_manager edit=role:admin|owner:account_manager archive=role:admin|owner:account_manager
+rule customers.expire field=status from=Trial to=Expired after=30d since=joined
+overview
+insight customers.monthly_revenue op=sum field=monthly_revenue label="Monthly revenue"

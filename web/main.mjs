@@ -1,0 +1,31 @@
+import { mountAirApp, renderFatalError } from "./runtime/ui.mjs";
+
+const demos = Object.freeze({
+  customers: { label: "Northstar CRM", source: "../apps/customer-manager.air", seed: "../data/customer-manager.seed.json", principal: { roles: ["admin"] } },
+  tasks: { label: "Lattice Tasks", source: "../apps/task-board.air", seed: "../data/task-board.seed.json", principal: { roles: ["admin"] } },
+  expenses: { label: "Expense Approval", source: "../apps/expense-approval.air", seed: "../data/expense-approval.seed.json", principal: { actor: "users", id: "u_01", roles: ["employee"] } },
+  experience_demo: { label: "Experience Hub", source: "../apps/experience-demo.air", seed: "../data/experience-demo.seed.json", principal: null }
+});
+
+const parameters = new URLSearchParams(location.search);
+const selected = Object.hasOwn(demos, parameters.get("demo")) ? parameters.get("demo") : "customers";
+const root = document.querySelector("#app");
+
+try {
+  const [appResponse, seedResponse] = await Promise.all([
+    fetch(demos[selected].source),
+    fetch(demos[selected].seed)
+  ]);
+  if (!appResponse.ok) throw new Error(`Could not load application intent (${appResponse.status})`);
+  if (!seedResponse.ok) throw new Error(`Could not load seed data (${seedResponse.status})`);
+  const [source, seedSource] = await Promise.all([appResponse.text(), seedResponse.text()]);
+  mountAirApp(root, source, {
+    demo: selected,
+    demos,
+    storage: window.localStorage,
+    seedSource,
+    principal: demos[selected].principal
+  });
+} catch (error) {
+  renderFatalError(root, error);
+}

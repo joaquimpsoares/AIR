@@ -1,0 +1,40 @@
+[
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Review",
+    "approvals": 1,
+    "approvalsRequired": 1,
+    "events": [
+      {
+        "transition": "requests.submit",
+        "event": "submitted",
+        "from": "Draft",
+        "to": "Submitted",
+        "actor": {
+          "actor": "users",
+          "id": "u1",
+          "roles": []
+        },
+        "at": "2026-09-18T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      },
+      {
+        "transition": "requests.route",
+        "event": "routed",
+        "from": "Submitted",
+        "to": "Review",
+        "actor": {
+          "actor": "system",
+          "id": "system",
+          "roles": []
+        },
+        "at": "2026-09-18T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      }
+    ]
+  }
+]

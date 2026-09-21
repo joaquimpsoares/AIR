@@ -1,0 +1,10 @@
+air version=2
+app deadlines
+resource reviews
+field reviews.title text required
+field reviews.state enum values=Review,Done
+field reviews.updated date required default=today
+manage reviews
+process reviews state=state initial=Review terminal=Done history touch=updated
+transition reviews.finish from=Review to=Done action=finish by=role:reviewer
+deadline reviews.review state=Review after=3bd escalation=required

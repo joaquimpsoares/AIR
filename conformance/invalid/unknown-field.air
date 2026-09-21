@@ -1,0 +1,5 @@
+air version=2
+app bad
+resource items label=missing
+field items.name text
+manage items

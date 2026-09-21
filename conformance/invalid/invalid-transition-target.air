@@ -1,0 +1,7 @@
+air version=2
+app bad
+resource items
+field items.state enum values=Open,Done
+manage items
+process items state=state initial=Open terminal=Done
+transition items.finish from=Open to=Missing action=finish by=true

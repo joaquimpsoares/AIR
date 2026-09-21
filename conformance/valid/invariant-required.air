@@ -1,0 +1,7 @@
+air version=2
+app required
+resource reports
+field reports.state enum values=Draft,Submitted default=Draft
+field reports.summary text
+manage reports
+invariant reports.summary when=state==Submitted require=summary

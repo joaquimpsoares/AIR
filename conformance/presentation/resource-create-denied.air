@@ -1,0 +1,7 @@
+air version=2
+app create_denied_sample title="Create Denied Test"
+resource audit_records label=action
+field audit_records.action text required
+manage audit_records create=false
+access audit_records view=true create=false
+overview

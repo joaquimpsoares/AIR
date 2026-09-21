@@ -1,0 +1,9 @@
+air version=2
+app bad
+resource users
+field users.name text
+manage users
+resource items
+field items.user ref=users
+manage items
+access items view=owner:user

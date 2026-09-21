@@ -1,0 +1,8 @@
+air version=2
+app insight_sample title="Resource With Insight Test"
+resource orders label=item
+field orders.item text required
+field orders.amount money currency=USD required
+manage orders
+overview
+insight orders.total_amount op=sum field=amount label="Total Orders"

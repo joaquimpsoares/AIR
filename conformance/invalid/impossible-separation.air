@@ -1,0 +1,12 @@
+air version=2
+app bad
+resource users
+field users.name text
+actor users
+manage users
+resource items
+field items.owner ref=users
+field items.state enum values=Review,Done
+manage items
+process items state=state initial=Review terminal=Done
+transition items.finish from=Review to=Done action=finish by=owner:owner separate=owner

@@ -1,0 +1,14 @@
+air version=2
+app experience_demo title="Experience Hub" subtitle="Standard experience composition demonstration" initial=overview
+theme mode=system accent=blue density=comfortable
+capability storage.local
+resource users label=name
+field users.name text required
+field users.email email required unique
+field users.role enum values=Admin,Manager,Member default=Member
+actor users
+manage users
+access users view=true edit=self|role:admin
+experience auth.standard actor=users identity=email title="Welcome Back" subtitle="Sign in to your demo workspace"
+experience user.management authority=role:admin
+overview title="Workspace Overview"

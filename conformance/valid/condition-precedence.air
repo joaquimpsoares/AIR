@@ -1,0 +1,10 @@
+air version=2
+app conditions
+resource requests
+field requests.amount number required
+field requests.limit number required
+field requests.state enum values=Draft,Ready,Held default=Draft
+field requests.reason text
+manage requests
+parameter requests.floor value=10
+invariant requests.reason when="amount+@floor>limit&state==Ready|state==Held" require=reason

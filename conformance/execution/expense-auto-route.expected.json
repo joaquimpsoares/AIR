@@ -1,0 +1,42 @@
+[
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Approved",
+    "approvals": 1,
+    "approvalsRequired": 1,
+    "events": [
+      {
+        "transition": "expenses.submit",
+        "event": "submitted",
+        "from": "Draft",
+        "to": "Submitted",
+        "actor": {
+          "actor": "users",
+          "id": "u_01",
+          "roles": [
+            "employee"
+          ]
+        },
+        "at": "2026-09-20T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      },
+      {
+        "transition": "expenses.auto_approve",
+        "event": "approved",
+        "from": "Submitted",
+        "to": "Approved",
+        "actor": {
+          "actor": "system",
+          "id": "system",
+          "roles": []
+        },
+        "at": "2026-09-20T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      }
+    ]
+  }
+]

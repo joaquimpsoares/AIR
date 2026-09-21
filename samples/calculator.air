@@ -1,0 +1,38 @@
+app calculator {
+  state left: number = 0;
+  state right: number = 0;
+  state result: number = 0;
+  state operator: text = "+";
+
+  start main;
+
+  screen main {
+    column {
+      text "Calculator";
+      row {
+        input "Left" value left { set left = event; }
+        input "Right" value right { set right = event; }
+      }
+      row {
+        button "Add" {
+          set operator = "+";
+          set result = left + right;
+        }
+        button "Subtract" {
+          set operator = "-";
+          set result = left - right;
+        }
+        button "Multiply" {
+          set operator = "*";
+          set result = left * right;
+        }
+        button "Divide" {
+          set operator = "/";
+          set result = left / right;
+        }
+      }
+      text "{left} {operator} {right} = {result}";
+    }
+  }
+}
+

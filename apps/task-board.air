@@ -1,0 +1,20 @@
+air version=2
+app task_board title=Lattice subtitle="Projects in motion"
+theme accent=blue
+capability storage.local
+resource projects
+field projects.name text required unique min=2
+field projects.owner text required
+field projects.status enum values=Planning,Active,Complete default=Planning
+field projects.target date
+field projects.summary text long
+manage projects
+resource tasks
+field tasks.title text required min=2
+field tasks.project ref=projects required
+field tasks.status enum values=Backlog,In_progress,Review,Done default=Backlog
+field tasks.priority enum values=Low,Medium,High,Urgent default=Medium
+field tasks.due date
+field tasks.notes text long
+manage tasks
+overview

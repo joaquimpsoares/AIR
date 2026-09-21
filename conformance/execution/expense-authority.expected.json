@@ -1,0 +1,54 @@
+[
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Approved",
+    "approvals": 1,
+    "approvalsRequired": 1,
+    "events": [
+      {
+        "transition": "expenses.manager_approve",
+        "event": "manager_approved",
+        "from": "ManagerReview",
+        "to": "Approved",
+        "actor": {
+          "actor": "users",
+          "id": "u_02",
+          "roles": [
+            "manager"
+          ]
+        },
+        "at": "2026-09-20T12:00:00.000Z",
+        "comment": "Within policy",
+        "completed": true
+      }
+    ]
+  },
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Approved",
+    "approvals": 1,
+    "approvalsRequired": 1,
+    "events": [
+      {
+        "transition": "expenses.finance_approve",
+        "event": "finance_approved",
+        "from": "FinanceReview",
+        "to": "Approved",
+        "actor": {
+          "actor": "users",
+          "id": "u_04",
+          "roles": [
+            "finance"
+          ]
+        },
+        "at": "2026-09-20T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      }
+    ]
+  }
+]

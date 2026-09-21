@@ -1,0 +1,2 @@
+set field customers.status values=Active,Trial,Inactive,VIP was_values=Active,Trial,Inactive
+add highlight customers.vip when=status:VIP tone=accent

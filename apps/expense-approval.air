@@ -1,0 +1,57 @@
+air version=2
+app expense_approval title="Expense Approval" subtitle="Deterministic review, approval, and payment" initial=overview
+theme mode=system accent=emerald density=compact
+capability storage.local
+resource users label=name
+field users.name text required
+field users.email email required unique
+field users.manager ref=users
+field users.monthly_budget money currency=USD required
+actor users
+manage users create=admin edit=admin delete=admin
+access users view=role:admin|role:finance|self|owner:manager edit=role:admin|self
+resource expenses label=description
+field expenses.employee ref=users required
+field expenses.amount money currency=USD required
+field expenses.category enum values=Travel,Supplies,Training,Regulatory,Other required
+field expenses.description text required min=2
+field expenses.travel_purpose text
+field expenses.date date required default=today
+field expenses.receipt_ref text label="Receipt reference"
+field expenses.status enum values=Draft,Submitted,ManagerReview,FinanceReview,Approved,Rejected,PaymentPending,Paid,Cancelled
+field expenses.created date required default=today
+field expenses.updated date required default=today
+manage expenses delete=false
+access expenses view=role:admin|role:finance|owner:employee|owner:employee.manager create=owner:employee edit=owner:employee
+parameter expenses.auto_limit value=500 label="Automatic approval limit"
+parameter expenses.manager_finance_limit value=5000 label="Finance review limit"
+parameter expenses.receipt_limit value=500 label="Receipt threshold"
+insight users.total_expenses op=sum source=expenses group=employee field=amount label="Total expenses"
+insight users.monthly_spend op=sum source=expenses group=employee field=amount where="status==Approved|status==PaymentPending|status==Paid" window=month date=date label="Monthly spend"
+process expenses state=status initial=Draft terminal=Paid,Cancelled history touch=updated
+transition expenses.submit from=Draft to=Submitted action=submit by=owner:employee event=submitted
+transition expenses.budget_finance from=Submitted to=FinanceReview automatic when="amount<@auto_limit&employee.monthly_spend+amount>employee.monthly_budget" event=finance_review_required
+transition expenses.auto_approve from=Submitted to=Approved automatic when="amount<@auto_limit&employee.monthly_spend+amount<=employee.monthly_budget" event=approved
+transition expenses.manager_route from=Submitted to=ManagerReview automatic when="amount>=@auto_limit" event=manager_review_required
+transition expenses.manager_approve from=ManagerReview to=Approved action=approve by=owner:employee.manager when="amount<=@manager_finance_limit&employee.monthly_spend+amount<=employee.monthly_budget" separate=employee comment=optional event=manager_approved
+transition expenses.manager_finance from=ManagerReview to=FinanceReview action=approve by=owner:employee.manager when="amount>@manager_finance_limit|employee.monthly_spend+amount>employee.monthly_budget" separate=employee comment=optional event=manager_approved
+transition expenses.manager_reject from=ManagerReview to=Rejected action=reject by=owner:employee.manager separate=employee comment=required event=rejected
+transition expenses.finance_approve from=FinanceReview to=Approved action=approve by=role:finance separate=employee comment=optional event=finance_approved
+transition expenses.finance_reject from=FinanceReview to=Rejected action=reject by=role:finance separate=employee comment=required event=rejected
+transition expenses.revise from=Rejected to=Draft action=revise by=owner:employee event=revised
+transition expenses.process_payment from=Approved to=PaymentPending action=process_payment by=role:finance event=payment_pending
+transition expenses.mark_paid from=PaymentPending to=Paid action=mark_paid by=role:finance event=paid
+transition expenses.cancel from=Draft to=Cancelled action=cancel by=owner:employee event=cancelled
+invariant expenses.receipt when="amount>@receipt_limit" require=receipt_ref
+invariant expenses.travel when="category==Travel" require=travel_purpose
+invariant expenses.created when=true immutable=created
+invariant expenses.review_locked when="status==Submitted|status==ManagerReview|status==FinanceReview|status==Rejected|status==Cancelled" immutable=*
+invariant expenses.approved_locked when="status==Approved|status==PaymentPending" immutable=*
+invariant expenses.paid_locked when="status==Paid" immutable=*
+deadline expenses.manager_review state=ManagerReview after=3bd escalation=required
+deadline expenses.finance_review state=FinanceReview after=2bd escalation=required
+overview title="Expense operations"
+insight expenses.pending_approval op=sum field=amount where="status==ManagerReview|status==FinanceReview" label="Pending approval"
+insight expenses.approved_total op=sum field=amount where=status:Approved label="Approved"
+insight expenses.paid_total op=sum field=amount where=status:Paid label="Paid"
+insight expenses.by_category op=count group=category label="Expenses by category"

@@ -1,0 +1,54 @@
+[
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": false,
+    "state": "Review",
+    "approvals": 1,
+    "approvalsRequired": 2,
+    "events": [
+      {
+        "transition": "requests.approve",
+        "event": "approved",
+        "from": "Review",
+        "to": "Review",
+        "actor": {
+          "actor": "users",
+          "id": "u1",
+          "roles": [
+            "reviewer"
+          ]
+        },
+        "at": "2026-09-18T12:00:00.000Z",
+        "comment": "",
+        "completed": false
+      }
+    ]
+  },
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Approved",
+    "approvals": 2,
+    "approvalsRequired": 2,
+    "events": [
+      {
+        "transition": "requests.approve",
+        "event": "approved",
+        "from": "Review",
+        "to": "Approved",
+        "actor": {
+          "actor": "users",
+          "id": "u2",
+          "roles": [
+            "reviewer"
+          ]
+        },
+        "at": "2026-09-18T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      }
+    ]
+  }
+]

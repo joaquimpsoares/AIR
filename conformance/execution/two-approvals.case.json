@@ -1,0 +1,10 @@
+{
+  "program": "two-approvals.air",
+  "clock": "2026-09-18T12:00:00.000Z",
+  "seed": {"requests":[{"id":"r1","title":"One","state":"Review"}]},
+  "principal": {"actor":"users","id":"u1","roles":["reviewer"]},
+  "steps": [
+    {"op":"transition","resource":"requests","id":"r1","action":"approve"},
+    {"op":"transition","resource":"requests","id":"r1","action":"approve","principal":{"actor":"users","id":"u2","roles":["reviewer"]}}
+  ]
+}

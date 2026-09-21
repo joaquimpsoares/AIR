@@ -1,0 +1,8 @@
+air version=2
+app readonly_sample title="Read-Only Resource Test"
+resource logs label=message
+field logs.message text required
+field logs.timestamp date required default=today
+manage logs create=false edit=false delete=false
+access logs view=true create=false edit=false delete=false
+overview

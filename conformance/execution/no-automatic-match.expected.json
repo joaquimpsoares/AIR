@@ -1,0 +1,26 @@
+[
+  {
+    "op": "transition",
+    "allowed": true,
+    "completed": true,
+    "state": "Submitted",
+    "approvals": 1,
+    "approvalsRequired": 1,
+    "events": [
+      {
+        "transition": "requests.submit",
+        "event": "submit",
+        "from": "Draft",
+        "to": "Submitted",
+        "actor": {
+          "actor": "users",
+          "id": "u1",
+          "roles": []
+        },
+        "at": "2026-09-18T12:00:00.000Z",
+        "comment": "",
+        "completed": true
+      }
+    ]
+  }
+]

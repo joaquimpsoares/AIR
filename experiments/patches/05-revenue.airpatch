@@ -1,0 +1,2 @@
+upsert field customers.monthly_revenue money currency=USD default=0
+upsert insight customers.monthly_revenue op=sum field=monthly_revenue label="Monthly revenue"

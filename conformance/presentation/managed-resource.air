@@ -1,0 +1,7 @@
+air version=2
+app managed_sample title="Managed Resource Test"
+resource projects label=title
+field projects.title text required
+field projects.status enum values=Active,Completed default=Active
+manage projects
+overview

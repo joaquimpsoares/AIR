@@ -1,0 +1,10 @@
+air version=2
+app ambiguous
+resource requests
+field requests.amount number required
+field requests.state enum values=Draft,Submitted,Low,High
+manage requests
+process requests state=state initial=Draft terminal=Low,High history
+transition requests.submit from=Draft to=Submitted action=submit by=true
+transition requests.low from=Submitted to=Low automatic when=amount>0
+transition requests.high from=Submitted to=High automatic when=amount<100

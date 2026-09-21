@@ -1,0 +1,17 @@
+{
+  "users": [
+    { "id": "u_01", "name": "Alice Rivera", "email": "alice@example.test", "manager": "u_02", "monthly_budget": 3000 },
+    { "id": "u_02", "name": "Jordan Kim", "email": "jordan@example.test", "manager": "u_03", "monthly_budget": 8000 },
+    { "id": "u_03", "name": "Casey Shah", "email": "casey@example.test", "manager": "", "monthly_budget": 10000 },
+    { "id": "u_04", "name": "Priya Nwosu", "email": "priya@example.test", "manager": "u_03", "monthly_budget": 8000 },
+    { "id": "u_05", "name": "Lee Novak", "email": "lee@example.test", "manager": "u_03", "monthly_budget": 8000 },
+    { "id": "u_06", "name": "Morgan Bell", "email": "morgan@example.test", "manager": "u_03", "monthly_budget": 4000 }
+  ],
+  "expenses": [
+    { "id": "x_01", "employee": "u_01", "amount": 120, "category": "Travel", "description": "Client train", "travel_purpose": "Quarterly client review", "date": "2026-09-20", "receipt_ref": "", "status": "Draft", "created": "2026-09-20", "updated": "2026-09-20" },
+    { "id": "x_02", "employee": "u_01", "amount": 1200, "category": "Supplies", "description": "Workshop equipment", "travel_purpose": "", "date": "2026-09-17", "receipt_ref": "receipt:x_02", "status": "ManagerReview", "created": "2026-09-17", "updated": "2026-09-17" },
+    { "id": "x_03", "employee": "u_02", "amount": 7000, "category": "Training", "description": "Leadership programme", "travel_purpose": "", "date": "2026-09-16", "receipt_ref": "receipt:x_03", "status": "FinanceReview", "created": "2026-09-15", "updated": "2026-09-16" },
+    { "id": "x_04", "employee": "u_06", "amount": 400, "category": "Other", "description": "Remote work stipend", "travel_purpose": "", "date": "2026-09-10", "receipt_ref": "", "status": "Approved", "created": "2026-09-10", "updated": "2026-09-10" },
+    { "id": "x_05", "employee": "u_01", "amount": 250, "category": "Supplies", "description": "Reference books", "travel_purpose": "", "date": "2026-09-05", "receipt_ref": "", "status": "Paid", "created": "2026-09-05", "updated": "2026-09-08" }
+  ]
+}

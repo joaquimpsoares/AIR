@@ -1,0 +1,10 @@
+[
+  {
+    "op": "transition",
+    "allowed": false,
+    "code": "AIR_EXEC_AUTO_CYCLE",
+    "phase": "execute",
+    "state": "Draft",
+    "historyLength": 0
+  }
+]

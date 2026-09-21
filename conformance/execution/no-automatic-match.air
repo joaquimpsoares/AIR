@@ -1,0 +1,9 @@
+air version=2
+app no_match
+resource requests
+field requests.amount number required
+field requests.state enum values=Draft,Submitted,Review
+manage requests
+process requests state=state initial=Draft terminal=Review history
+transition requests.submit from=Draft to=Submitted action=submit by=true
+transition requests.route from=Submitted to=Review automatic when=amount>100

@@ -1,0 +1,6 @@
+air version=2
+app basic
+resource notes
+field notes.title text required min=2
+field notes.done bool default=false
+manage notes

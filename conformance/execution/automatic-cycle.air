@@ -1,0 +1,10 @@
+air version=2
+app cycle
+resource requests
+field requests.enabled bool default=true
+field requests.state enum values=Draft,A,B
+manage requests
+process requests state=state initial=Draft history
+transition requests.start from=Draft to=A action=start by=true
+transition requests.to_b from=A to=B automatic when=enabled==true
+transition requests.to_a from=B to=A automatic when=enabled==true

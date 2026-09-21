@@ -1,0 +1,9 @@
+air version=2
+app bad
+resource teams
+field teams.name text
+manage teams
+resource entries
+field entries.team text
+manage entries
+insight teams.total source=entries group=team op=count

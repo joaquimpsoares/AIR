@@ -1,0 +1,7 @@
+air version=2
+app immutable
+resource records
+field records.name text required
+field records.final bool default=false
+manage records
+invariant records.final when=final==true immutable=*

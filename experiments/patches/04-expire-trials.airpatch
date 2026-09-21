@@ -1,0 +1,1 @@
+upsert rule customers.expire field=status from=Trial to=Expired after=30d since=joined

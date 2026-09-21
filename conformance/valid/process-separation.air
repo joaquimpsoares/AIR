@@ -1,0 +1,12 @@
+air version=2
+app separation
+resource users label=name
+field users.name text required
+actor users
+manage users
+resource changes
+field changes.owner ref=users required
+field changes.state enum values=Review,Approved
+manage changes
+process changes state=state initial=Review terminal=Approved history
+transition changes.approve from=Review to=Approved action=approve by=role:reviewer separate=owner

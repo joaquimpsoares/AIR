@@ -1,0 +1,36 @@
+app hello_settings {
+  state name: text = "Joaquim";
+  state draft_name: text = "Joaquim";
+
+  start home;
+
+  screen home {
+    column {
+      text "Hello, {name}";
+      button "Settings" {
+        set draft_name = name;
+        navigate settings;
+      }
+    }
+  }
+
+  screen settings {
+    column {
+      text "Settings";
+      input "Name" value draft_name {
+        set draft_name = event;
+      }
+      row {
+        button "Save" {
+          set name = draft_name;
+          navigate home;
+        }
+        button "Cancel" {
+          set draft_name = name;
+          navigate home;
+        }
+      }
+    }
+  }
+}
+

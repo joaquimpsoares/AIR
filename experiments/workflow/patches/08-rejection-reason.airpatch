@@ -1,0 +1,2 @@
+assert transition expenses.manager_reject comment=required
+assert transition expenses.finance_reject comment=required

@@ -1,0 +1,1 @@
+add transition expenses.withdraw from=Submitted,ManagerReview,FinanceReview to=Draft action=withdraw by=owner:employee unless_event=manager_approved,finance_approved event=withdrawn

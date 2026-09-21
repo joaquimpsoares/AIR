@@ -1,0 +1,6 @@
+air version=2
+app equivalent
+resource items
+field items.name text
+manage items
+access items view=role:reader|role:admin

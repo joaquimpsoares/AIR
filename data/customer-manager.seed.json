@@ -1,0 +1,21 @@
+{
+  "account_managers": [
+    { "id": "am_01", "name": "Maya Chen", "email": "maya@northstar.example" },
+    { "id": "am_02", "name": "Ari Okafor", "email": "ari@northstar.example" },
+    { "id": "am_03", "name": "Elena Rossi", "email": "elena@northstar.example" }
+  ],
+  "customers": [
+    { "id": "c_01", "name": "Acme Studio", "email": "hello@acme.studio", "phone": "+1 415 555 0182", "company": "Acme Studio LLC", "vat_number": "US-ACME-1042", "account_manager": "am_01", "status": "Active", "joined": "2026-08-28", "notes": "Design partner · quarterly review in October", "monthly_revenue": 2500 },
+    { "id": "c_02", "name": "Lumen Labs", "email": "ops@lumenlabs.io", "phone": "+44 20 7946 0914", "company": "Lumen Labs Ltd", "vat_number": "GB-884201", "account_manager": "am_02", "status": "Trial", "joined": "2026-09-16", "notes": "Evaluating the team plan", "monthly_revenue": 900 },
+    { "id": "c_03", "name": "Northwind Health", "email": "care@northwind.health", "phone": "+1 312 555 0148", "company": "Northwind Health Inc", "vat_number": "US-NW-7719", "account_manager": "am_01", "status": "Active", "joined": "2026-07-11", "notes": "Security review completed", "monthly_revenue": 4200 },
+    { "id": "c_04", "name": "Paper & Pine", "email": "studio@paperandpine.co", "phone": "+1 503 555 0164", "company": "Paper & Pine Co", "vat_number": "US-PP-2019", "account_manager": "am_03", "status": "Inactive", "joined": "2026-02-19", "notes": "Seasonal business; reconnect in November", "monthly_revenue": 0 },
+    { "id": "c_05", "name": "Orbit Systems", "email": "team@orbit.systems", "phone": "+49 30 901820", "company": "Orbit Systems GmbH", "vat_number": "DE-291884", "account_manager": "am_02", "status": "Active", "joined": "2026-09-03", "notes": "Expanding to the operations group", "monthly_revenue": 3100 },
+    { "id": "c_06", "name": "Fieldwork Co.", "email": "hello@fieldwork.co", "phone": "+61 2 9374 4100", "company": "Fieldwork Pty Ltd", "vat_number": "AU-618230", "account_manager": "am_03", "status": "Trial", "joined": "2026-09-18", "notes": "Onboarding call booked", "monthly_revenue": 750 },
+    { "id": "c_07", "name": "Juniper Market", "email": "owners@junipermarket.com", "phone": "+1 206 555 0109", "company": "Juniper Market LLC", "vat_number": "US-JM-4420", "account_manager": "am_01", "status": "Active", "joined": "2026-06-22", "notes": "Interested in the API", "monthly_revenue": 1800 },
+    { "id": "c_08", "name": "Mono Works", "email": "contact@monoworks.design", "phone": "+45 33 12 90 18", "company": "Mono Works ApS", "vat_number": "DK-330119", "account_manager": "am_02", "status": "Inactive", "joined": "2025-12-04", "notes": "Paused after team reorganization", "monthly_revenue": 0 },
+    { "id": "c_09", "name": "Sable Finance", "email": "support@sable.finance", "phone": "+1 646 555 0191", "company": "Sable Finance Inc", "vat_number": "US-SF-9931", "account_manager": "am_03", "status": "Active", "joined": "2026-08-09", "notes": "Annual contract", "monthly_revenue": 5600 },
+    { "id": "c_10", "name": "Atlas Learning", "email": "admin@atlaslearning.org", "phone": "+1 617 555 0128", "company": "Atlas Learning Foundation", "vat_number": "US-AL-8102", "account_manager": "am_01", "status": "Trial", "joined": "2026-09-12", "notes": "Pilot with twelve educators", "monthly_revenue": 1200 },
+    { "id": "c_11", "name": "Cedar Robotics", "email": "lab@cedarrobotics.ai", "phone": "+81 3 1234 5678", "company": "Cedar Robotics KK", "vat_number": "JP-CR-1148", "account_manager": "am_02", "status": "Active", "joined": "2026-05-17", "notes": "Product feedback champion", "monthly_revenue": 3900 },
+    { "id": "c_12", "name": "Kite & Key", "email": "team@kiteandkey.com", "phone": "+1 512 555 0175", "company": "Kite & Key LLC", "vat_number": "US-KK-6610", "account_manager": "am_03", "status": "Active", "joined": "2026-09-19", "notes": "Referred by Acme Studio", "monthly_revenue": 2200 }
+  ]
+}

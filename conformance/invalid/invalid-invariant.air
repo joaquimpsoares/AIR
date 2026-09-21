@@ -1,0 +1,6 @@
+air version=2
+app bad
+resource items
+field items.name text
+manage items
+invariant items.empty when=true

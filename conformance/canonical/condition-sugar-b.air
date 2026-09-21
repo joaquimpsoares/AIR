@@ -1,0 +1,7 @@
+air version=2
+app condition_equivalent
+resource items
+field items.state enum values=Open,Done
+field items.note text
+manage items
+invariant items.note when=state==Done require=note

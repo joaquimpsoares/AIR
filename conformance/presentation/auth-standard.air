@@ -1,0 +1,11 @@
+air version=2
+app auth_standard_test title="Auth Standard App"
+capability storage.local
+resource users label=name
+field users.name text required
+field users.email email required unique
+field users.role enum values=Admin,Member default=Member
+actor users
+manage users
+experience auth.standard actor=users identity=email
+overview title="Overview"

@@ -1,0 +1,13 @@
+air version=2
+app customer_manager title="Northstar CRM" subtitle="Customer relationships, without the busywork"
+theme mode=dark accent=violet
+capability storage.local
+resource customers
+field customers.name text required min=2
+field customers.email email required unique
+field customers.phone phone
+field customers.status enum values=Active,Trial,Inactive default=Trial
+field customers.joined date required default=today
+field customers.notes text long
+manage customers
+overview

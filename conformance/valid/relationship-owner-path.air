@@ -1,0 +1,12 @@
+air version=2
+app ownership
+resource users label=name
+field users.name text required
+field users.manager ref=users
+actor users
+manage users
+resource documents
+field documents.title text required
+field documents.author ref=users required
+manage documents
+access documents view=owner:author.manager edit=owner:author

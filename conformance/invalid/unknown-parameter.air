@@ -1,0 +1,6 @@
+air version=2
+app bad
+resource items
+field items.amount number
+manage items
+invariant items.bad when=amount>@missing require=amount

@@ -1,0 +1,7 @@
+{
+  "program": "automatic-cycle.air",
+  "clock": "2026-09-18T12:00:00.000Z",
+  "seed": {"requests":[{"id":"r1","enabled":true,"state":"Draft"}]},
+  "principal": {"actor":"users","id":"u1","roles":[]},
+  "steps": [{"op":"transition","resource":"requests","id":"r1","action":"start"}]
+}

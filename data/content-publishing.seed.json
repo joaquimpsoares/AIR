@@ -1,0 +1,10 @@
+{
+  "users": [
+    { "id": "author_1", "name": "Amara Vale" },
+    { "id": "editor_1", "name": "Theo Lin" },
+    { "id": "legal_1", "name": "Nadia Cole" }
+  ],
+  "articles": [
+    { "id": "article_1", "title": "Policy update", "author": "author_1", "category": "Regulated", "state": "Draft", "updated": "2026-09-20" }
+  ]
+}

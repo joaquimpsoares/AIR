@@ -1,0 +1,10 @@
+[
+  { "id": "01-preferred-language", "request": "Add a preferred language to customers.", "capabilityQuery": "add customer field language", "conventionalTokens": 2400, "expectedAddresses": ["field:customers.preferred_language"] },
+  { "id": "02-multiple-contacts", "request": "Customers should have multiple contacts.", "capabilityQuery": "multiple contacts relationship resource scoped ownership permission", "conventionalTokens": 4800, "runtimeChanges": "generic owner-path access", "expectedAddresses": ["resource:contacts", "field:contacts.name", "field:contacts.email", "field:contacts.customer", "manage:contacts", "access:contacts"] },
+  { "id": "03-admin-archive", "request": "Only admins can archive customers.", "capabilityQuery": "admin archive permission patch", "conventionalTokens": 3600, "expectedAddresses": ["access:customers"] },
+  { "id": "04-own-customers", "request": "Account managers can only see their own customers.", "capabilityQuery": "ownership scoped view permission actor relationship", "conventionalTokens": 5200, "expectedAddresses": [] },
+  { "id": "05-active-count", "request": "Show the number of active customers for each account manager.", "capabilityQuery": "relationship grouped aggregate count active", "conventionalTokens": 4600, "expectedAddresses": ["insight:account_managers.active_customers"] },
+  { "id": "06-expire-45", "request": "Trial customers expire after 45 days instead of 30.", "capabilityQuery": "rule transition expiry duration patch", "conventionalTokens": 3200, "expectedAddresses": ["rule:customers.expire"] },
+  { "id": "07-tax-id", "request": "Rename VAT Number to Tax ID without changing its semantic identity/data field.", "capabilityQuery": "field metadata label rename identity patch", "conventionalTokens": 2800, "expectedAddresses": ["field:customers.vat_number"] },
+  { "id": "08-vip-highlight", "request": "Add a VIP customer status and highlight VIP customers.", "capabilityQuery": "enum status semantic highlight presentation patch", "conventionalTokens": 3900, "expectedAddresses": ["field:customers.status", "highlight:customers.vip"] }
+]

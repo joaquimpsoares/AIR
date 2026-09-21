@@ -1,0 +1,19 @@
+{
+  "name": "air-semantic-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:rust": "sh tools/rust-test.sh",
+    "test:dual": "node tools/dual-conformance.mjs",
+    "test:wasm": "node tools/wasm-smoke.mjs",
+    "conformance": "node tools/conformance.mjs",
+    "air": "node tools/air-cli.mjs",
+    "context": "node tools/context-experiment.mjs",
+    "workflow:context": "node tools/workflow-context.mjs",
+    "measure": "node tools/measure.mjs",
+    "check": "npm test && npm run conformance && cargo check --workspace && npm run test:rust && npm run test:dual && npm run test:wasm && npm run measure && npm run context && npm run workflow:context"
+  }
+}

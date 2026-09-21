@@ -1,0 +1,8 @@
+air version=2
+app approvals
+resource requests
+field requests.title text required
+field requests.state enum values=Review,Approved
+manage requests
+process requests state=state initial=Review terminal=Approved history
+transition requests.approve from=Review to=Approved action=approve by=role:reviewer approvals=2 distinct=true event=approved

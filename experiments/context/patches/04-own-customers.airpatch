@@ -1,0 +1,1 @@
+assert access customers view=role:admin|owner:account_manager

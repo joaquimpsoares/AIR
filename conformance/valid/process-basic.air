@@ -1,0 +1,8 @@
+air version=2
+app process_basic
+resource tickets
+field tickets.title text required
+field tickets.state enum values=Open,Closed
+manage tickets
+process tickets state=state initial=Open terminal=Closed history
+transition tickets.close from=Open to=Closed action=close by=role:agent event=closed

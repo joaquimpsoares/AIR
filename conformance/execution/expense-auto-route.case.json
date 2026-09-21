@@ -1,0 +1,7 @@
+{
+  "program": "../../apps/expense-approval.air",
+  "seedFile": "../../data/expense-approval.seed.json",
+  "clock": "2026-09-20T12:00:00.000Z",
+  "principal": {"actor":"users","id":"u_01","roles":["employee"]},
+  "steps": [{"op":"transition","resource":"expenses","id":"x_01","action":"submit"}]
+}

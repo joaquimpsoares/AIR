@@ -1,0 +1,11 @@
+air version=2
+app aggregates
+resource teams label=name
+field teams.name text required
+manage teams
+resource entries
+field entries.team ref=teams required
+field entries.amount money currency=USD required
+field entries.state enum values=Open,Posted
+manage entries
+insight teams.total op=sum source=entries group=team field=amount where=state==Posted label=Total

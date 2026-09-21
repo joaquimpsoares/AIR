@@ -1,0 +1,28 @@
+app notes {
+  state draft: text = "";
+  state saved: text = "";
+  state has_note: bool = false;
+
+  start main;
+
+  screen main {
+    column {
+      text "Notes";
+      input "Note" value draft { set draft = event; }
+      button "Save" {
+        set saved = draft;
+        set has_note = true;
+      }
+      if has_note {
+        text "Saved: {saved}";
+        button "Clear" {
+          set draft = "";
+          set saved = "";
+          set has_note = false;
+        }
+      } else {
+        text "No saved note";
+      }
+    }
+  }
+}

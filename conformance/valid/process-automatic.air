@@ -1,0 +1,9 @@
+air version=2
+app process_automatic
+resource requests
+field requests.title text required
+field requests.state enum values=Draft,Submitted,Review
+manage requests
+process requests state=state initial=Draft terminal=Review history
+transition requests.submit from=Draft to=Submitted action=submit by=true event=submitted
+transition requests.route from=Submitted to=Review automatic event=routed

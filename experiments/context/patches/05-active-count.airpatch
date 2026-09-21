@@ -1,0 +1,1 @@
+add insight account_managers.active_customers op=count source=customers group=account_manager where=status:Active label="Active customers"

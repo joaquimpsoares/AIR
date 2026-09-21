@@ -1,0 +1,5 @@
+set field expenses.status values=Draft,Submitted,ManagerReview,FinanceReview,Approved,Rejected,PaymentPending,Paid,Cancelled,LegalReview was_values=Draft,Submitted,ManagerReview,FinanceReview,Approved,Rejected,PaymentPending,Paid,Cancelled
+set transition expenses.finance_approve when=category!=Regulatory was_when=<absent>
+add transition expenses.finance_legal from=FinanceReview to=LegalReview action=approve by=role:finance when=category==Regulatory separate=employee comment=optional event=finance_approved
+add transition expenses.legal_approve from=LegalReview to=Approved action=approve by=role:legal separate=employee comment=optional event=legal_approved
+add transition expenses.legal_reject from=LegalReview to=Rejected action=reject by=role:legal separate=employee comment=required event=rejected

@@ -1,0 +1,7 @@
+air version=2
+app create_auth_sample title="Create Authorized Test"
+resource items label=name
+field items.name text required
+manage items create=true
+access items view=true create=true
+overview

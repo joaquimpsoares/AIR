@@ -1,0 +1,1 @@
+set field customers.vat_number label="Tax ID" was_label="VAT Number"

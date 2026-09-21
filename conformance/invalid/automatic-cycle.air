@@ -1,0 +1,8 @@
+air version=2
+app bad
+resource items
+field items.state enum values=A,B
+manage items
+process items state=state initial=A
+transition items.to_b from=A to=B automatic
+transition items.to_a from=B to=A automatic

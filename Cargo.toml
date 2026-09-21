@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/air-core",
+    "crates/air-cli",
+    "crates/air-runtime",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.1.0"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+

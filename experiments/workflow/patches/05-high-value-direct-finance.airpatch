@@ -1,0 +1,2 @@
+set transition expenses.manager_route when="amount>=@auto_limit&amount<=20000" was_when="amount>=@auto_limit"
+add transition expenses.high_value_finance from=Submitted to=FinanceReview automatic when=amount>20000 event=finance_review_required

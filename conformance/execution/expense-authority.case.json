@@ -1,0 +1,10 @@
+{
+  "program": "../../apps/expense-approval.air",
+  "seedFile": "../../data/expense-approval.seed.json",
+  "clock": "2026-09-20T12:00:00.000Z",
+  "principal": {"actor":"users","id":"u_02","roles":["manager"]},
+  "steps": [
+    {"op":"transition","resource":"expenses","id":"x_02","action":"approve","input":{"comment":"Within policy"}},
+    {"op":"transition","resource":"expenses","id":"x_03","action":"approve","principal":{"actor":"users","id":"u_04","roles":["finance"]}}
+  ]
+}
