@@ -1,0 +1,10 @@
+{
+  "id": "capability-abuse",
+  "description": "Repeated attempts to access ungranted MCP actions or ungranted secrets trigger capability-abuse detection and throttle",
+  "pattern": "capability_abuse_pattern",
+  "source": "198.51.100.50",
+  "denialCount": 4,
+  "expectedDetection": true,
+  "expectedReaction": "throttle",
+  "expectedConfidence": "high"
+}

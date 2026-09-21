@@ -1,0 +1,10 @@
+{
+  "id": "failed-login-threshold",
+  "description": "Repeated login failures against a single identity trigger failed-login detection and identity throttle",
+  "pattern": "repeated_identity_login_failures",
+  "failureCount": 5,
+  "identity": "user_victim_1",
+  "expectedDetection": true,
+  "expectedReaction": "throttle",
+  "expectedConfidence": "high"
+}

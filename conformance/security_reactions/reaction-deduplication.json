@@ -1,0 +1,7 @@
+{
+  "id": "reaction-deduplication",
+  "description": "Repeated matching events on already-denied subject do not create duplicate deny entries",
+  "target": "198.51.100.66",
+  "eventCount": 10,
+  "expectedActiveReactions": 1
+}

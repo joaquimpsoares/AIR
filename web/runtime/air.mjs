@@ -54,6 +54,38 @@ export {
   OperationalEngine
 } from "./operations.mjs";
 
+export {
+  SECURITY_EVENT_TYPES,
+  REACTION_CLASSES,
+  REACTION_DISRUPTIVENESS,
+  CONFIDENCE_LEVELS,
+  SECURITY_SAFETY_LIMITS,
+  extractClientAddress,
+  Detection,
+  Detector,
+  FailedLoginDetector,
+  PasswordSprayDetector,
+  CredentialStuffingDetector,
+  AuthorizationAbuseDetector,
+  ResourceEnumerationDetector,
+  CapabilityAbuseDetector,
+  RateWindowDetector,
+  DetectionEngine,
+  SECURITY_PROFILES,
+  SecurityPolicy,
+  diffSecurityPolicies,
+  SecurityAdapter,
+  LocalSecurityAdapter,
+  SecurityReactionEngine
+} from "./security_reactions.mjs";
+
+export {
+  buildDiagnosticContext,
+  DiagnosticAnalyzer,
+  DeterministicDiagnosticAnalyzer,
+  DiagnosticReportValidator
+} from "./diagnostics.mjs";
+
 import { FIELD_CLASSIFICATIONS, globalRedactor } from "./security.mjs";
 import { OPERATIONAL_ERROR_CODES, OperationalError, FAILURE_CLASSIFICATIONS } from "./operations.mjs";
 

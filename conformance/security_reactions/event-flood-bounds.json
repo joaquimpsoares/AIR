@@ -1,0 +1,7 @@
+{
+  "id": "event-flood-bounds",
+  "description": "Detector state is bounded against millions of random attacker-controlled IPs or identities",
+  "randomSubjectsCount": 2000,
+  "maxTrackedSubjects": 500,
+  "expectedMaxRetained": 500
+}

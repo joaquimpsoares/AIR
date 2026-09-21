@@ -1,0 +1,8 @@
+{
+  "id": "ai-context-redaction",
+  "description": "DiagnosticContext removes raw secrets, bearer tokens, and minimizes PII before analyzer review",
+  "rawError": "Authentication failure with password=super_secret_sentinel_xyz and Bearer token_abc_123",
+  "registeredSecret": "super_secret_sentinel_xyz",
+  "expectedSecretLeak": false,
+  "expectedBearerLeak": false
+}

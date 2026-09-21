@@ -1,0 +1,10 @@
+{
+  "id": "resource-enumeration",
+  "description": "Rapid sequential queries yielding data denials triggers resource-enumeration detection and rate limiting",
+  "pattern": "resource_enumeration_pattern",
+  "source": "198.51.100.99",
+  "denialCount": 8,
+  "expectedDetection": true,
+  "expectedReaction": "rate_limit",
+  "expectedConfidence": "medium"
+}

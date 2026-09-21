@@ -72,9 +72,21 @@ Dynamic SQL generation within `SqliteDataAdapter` and `PostgresDataAdapter` stri
 
 ---
 
-## 6. AI Context Safety
+## 6. AI Context Safety & Diagnostic Boundaries
 
-The runtime's `toAiContext()` model extracts metadata-only schemas by default:
-- Record instances are omitted unless granted `ai:data:<resource>:read`.
-- Sensitive and secret fields are automatically masked or stripped.
-- Header values in connector definitions (e.g. `Authorization: Bearer ...`) are redacted before being passed to AI prompt contexts.
+See [`DIAGNOSTICS.md`](DIAGNOSTICS.md) for complete details.
+- The runtime's `toAiContext()` model extracts metadata-only schemas by default.
+- `buildDiagnosticContext()` extracts frozen, read-only incident summaries with PII minimization and prompt injection barriers (`untrustedEventData`).
+- AI diagnostic analyzers have zero action handles and zero authority to execute tools, revoke sessions, or change security policies.
+
+---
+
+## 7. Security Reaction Engine & Abuse Detection
+
+See [`SECURITY_REACTIONS.md`](SECURITY_REACTIONS.md) for complete details.
+- Generic, behavior-based detectors for Failed Logins, Password Spraying, Credential Stuffing, Authorization Probing, Resource Enumeration, and Capability Abuse.
+- Graduated reaction hierarchy (`observe`, `rate_limit`, `throttle`, `session_revoke`, `temporary_identity_deny`, `temporary_source_deny`).
+- Two-Key Reaction Authorization (Policy Eligibility + Security Capability Grant).
+- Clock-driven automatic expiry and reaction deduplication.
+- Trusted `SecurityAdapter` interface isolating semantic reactions from host infrastructure.
+

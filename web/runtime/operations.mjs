@@ -386,6 +386,8 @@ export class OperationalEvent {
     this.trace_id = options.trace_id ?? null;
     this.incident_id = options.incident_id ?? null;
     this.actor_id = options.actor_id ?? null;
+    this.session_id = options.session_id ?? null;
+    this.source = options.source ?? null;
     this.resource = options.resource ?? null;
     this.adapter = options.adapter ?? null;
     this.connector = options.connector ?? null;

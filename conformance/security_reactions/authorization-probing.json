@@ -1,0 +1,10 @@
+{
+  "id": "authorization-probing",
+  "description": "Authenticated low-privilege session repeatedly denied admin operations triggers authorization-probing detection and session revocation",
+  "pattern": "repeated_authorization_probing",
+  "sessionId": "sess_malicious_123",
+  "denialCount": 5,
+  "expectedDetection": true,
+  "expectedReaction": "session_revoke",
+  "expectedConfidence": "high"
+}

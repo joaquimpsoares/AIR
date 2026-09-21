@@ -1,0 +1,8 @@
+{
+  "id": "reaction-expiry",
+  "description": "Temporary source denial expires automatically after duration without permanent ban",
+  "target": "198.51.100.77",
+  "durationMs": 5000,
+  "expectedStateBeforeExpiry": "denied",
+  "expectedStateAfterExpiry": "allowed"
+}

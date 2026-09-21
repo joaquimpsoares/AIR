@@ -363,6 +363,12 @@ export class Capability {
     if (this.domain === "ai") {
       return `ai:${this.target}:${this.resource}:${this.action}`;
     }
+    if (this.domain === "security") {
+      return `security:${this.target}${this.action !== "*" ? `:${this.action}` : ""}`;
+    }
+    if (this.domain === "recovery") {
+      return `recovery:${this.target}${this.action !== "*" ? `:${this.action}` : ""}`;
+    }
     return `${this.domain}:${this.target}:${this.resource}:${this.action}`;
   }
 

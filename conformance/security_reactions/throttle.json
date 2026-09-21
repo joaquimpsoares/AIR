@@ -1,0 +1,9 @@
+{
+  "id": "throttle",
+  "description": "Throttling reaction adds safe bounded delays to suspicious request sequences",
+  "reactionClass": "throttle",
+  "target": "identity:user_123",
+  "delayMs": 500,
+  "durationMs": 60000,
+  "expectedDisruptiveness": 3
+}

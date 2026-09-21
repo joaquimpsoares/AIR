@@ -1,0 +1,9 @@
+{
+  "id": "shared-ip-safety",
+  "description": "Malicious session on shared NAT IP is throttled/revoked while legitimate session on same IP remains usable",
+  "sharedIp": "203.0.113.195",
+  "maliciousSession": "sess_bad",
+  "legitimateSession": "sess_good",
+  "expectedMaliciousSessionState": "revoked",
+  "expectedLegitimateSessionState": "allowed"
+}

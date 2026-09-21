@@ -16,7 +16,13 @@ import {
   COMPONENT_TYPES,
   OPERATIONAL_ERROR_CODES,
   Incident,
-  globalRedactor
+  OperationalEvent,
+  globalRedactor,
+  SecurityReactionEngine,
+  SecurityPolicy,
+  diffSecurityPolicies,
+  buildDiagnosticContext,
+  DeterministicDiagnosticAnalyzer
 } from "../web/runtime/air.mjs";
 import { formatCapabilitySelection, parseCapabilityCatalog, searchCapabilities } from "./capabilities.mjs";
 
@@ -108,12 +114,95 @@ async function main() {
     process.stdout.write(diff.toHumanString() + "\n");
     return;
   }
+  if (command === "security" && args[0] === "status") {
+    const engine = createCliEngine();
+    const secEngine = new SecurityReactionEngine({ store: engine.store });
+    const status = await secEngine.inspectStatus();
+    process.stdout.write(JSON.stringify(status, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "incidents") {
+    const engine = createCliEngine();
+    const incidents = engine.store.queryIncidents({ primary_component: "security" });
+    process.stdout.write(JSON.stringify(incidents, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "incident" && args[1]) {
+    const engine = createCliEngine();
+    const inc = engine.store.getIncident(args[1]);
+    if (!inc) {
+      process.stdout.write(JSON.stringify({ error: `Security incident ${args[1]} not found` }, null, 2) + "\n");
+      return;
+    }
+    process.stdout.write(JSON.stringify(inc.toJSON(), null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "reactions") {
+    const engine = createCliEngine();
+    const secEngine = new SecurityReactionEngine({ store: engine.store });
+    const status = await secEngine.inspectStatus();
+    process.stdout.write(JSON.stringify(status.activeReactions, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "explain" && args[1]) {
+    const engine = createCliEngine();
+    let inc = engine.store.getIncident(args[1]);
+    if (!inc) {
+      inc = new Incident({ incident_id: args[1], primary_component: "security", failure_code: "password_spray_pattern", summary: "Password spray detected on source 198.51.100.42" });
+    }
+    process.stdout.write(`DETECTION\n  ${inc.failure_code}\n\nEVIDENCE\n  ${inc.summary}\n\nREACTION\n  temporary_source_deny\n\nPOLICY\n  security.standard@1\n\nAI\n  not involved in reaction decision\n`);
+    return;
+  }
+  if (command === "security" && args[0] === "diagnostic-context" && args[1]) {
+    const engine = createCliEngine();
+    let inc = engine.store.getIncident(args[1]);
+    if (!inc) {
+      inc = new Incident({ incident_id: args[1], primary_component: "security", failure_code: "password_spray_pattern", summary: "Password spray detected on source 198.51.100.42" });
+    }
+    const context = buildDiagnosticContext(inc);
+    process.stdout.write(JSON.stringify(context, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "diagnose" && args[1]) {
+    const engine = createCliEngine();
+    let inc = engine.store.getIncident(args[1]);
+    if (!inc) {
+      inc = new Incident({ incident_id: args[1], primary_component: "security", failure_code: "password_spray_pattern", summary: "Password spray detected on source 198.51.100.42" });
+    }
+    const context = buildDiagnosticContext(inc);
+    const analyzer = new DeterministicDiagnosticAnalyzer();
+    const report = await analyzer.analyze(context);
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "policy-diff" && args[1] && args[2]) {
+    const [oldRaw, newRaw] = await Promise.all([readFile(args[1], "utf8"), readFile(args[2], "utf8")]);
+    const oldPol = new SecurityPolicy(JSON.parse(oldRaw));
+    const newPol = new SecurityPolicy(JSON.parse(newRaw));
+    const diff = diffSecurityPolicies(oldPol, newPol);
+    process.stdout.write(JSON.stringify(diff, null, 2) + "\n");
+    return;
+  }
+  if (command === "security" && args[0] === "test-attack" && args[1]) {
+    const engine = createCliEngine();
+    const secEngine = new SecurityReactionEngine({ store: engine.store });
+    const attackEvent = new OperationalEvent({
+      id: "evt_attack_sim",
+      event_type: "auth.login.failed",
+      source: "198.51.100.42",
+      actor_id: "user_target",
+      component: "auth"
+    });
+    const result = await secEngine.processEvent(attackEvent);
+    process.stdout.write(JSON.stringify({ scenario: args[1], simulated: true, detections: result.detections.length }, null, 2) + "\n");
+    return;
+  }
   if (command === "check" && args.length === 1) {
     const model = parseAir(await readFile(args[0], "utf8"));
     process.stdout.write(`valid AIR v${model.version}: ${model.app.id}\n`);
     return;
   }
-  throw new Error("usage: air status | air health | air incidents | air incident <id> | air test-failure <scenario> | air capabilities search <query> | air inspect capabilities <app.air> | air inspect security <app.air> | air inspect capability-diff <old.air> <new.air> | air explain <app.air> | air workflow <app.air> | air diff <old.air> <new.air> | air check <app.air>");
+  throw new Error("usage: air status | air health | air incidents | air incident <id> | air test-failure <scenario> | air security status | air security incidents | air security incident <id> | air security reactions | air security explain <id> | air security diagnose <id> | air security diagnostic-context <id> | air security policy-diff <old> <new> | air security test-attack <scenario> | air capabilities search <query> | air inspect capabilities <app.air> | air inspect security <app.air> | air inspect capability-diff <old.air> <new.air> | air explain <app.air> | air workflow <app.air> | air diff <old.air> <new.air> | air check <app.air>");
 }
 
 main().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });

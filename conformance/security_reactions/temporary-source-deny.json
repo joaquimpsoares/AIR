@@ -1,0 +1,9 @@
+{
+  "id": "temporary-source-deny",
+  "description": "Severe attack pattern triggers temporary source deny bounded by safety limits",
+  "reactionClass": "temporary_source_deny",
+  "target": "198.51.100.88",
+  "durationMs": 300000,
+  "maxSafetyDurationMs": 86400000,
+  "expectedDisruptiveness": 6
+}

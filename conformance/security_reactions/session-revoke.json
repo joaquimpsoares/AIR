@@ -1,0 +1,7 @@
+{
+  "id": "session-revoke",
+  "description": "Session revocation invalidates compromised session without blocking entire shared IP",
+  "reactionClass": "session_revoke",
+  "target": "sess_victim_shared_ip",
+  "expectedDisruptiveness": 4
+}

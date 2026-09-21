@@ -1,0 +1,8 @@
+{
+  "id": "policy-severity-diff",
+  "description": "Policy diff identifies when a new security policy version increases reaction aggressiveness",
+  "oldProfile": "conservative",
+  "newProfile": "strict",
+  "expectedAggressivenessIncreased": true,
+  "expectedCode": "SECURITY_POLICY_AGGRESSIVENESS_INCREASE"
+}

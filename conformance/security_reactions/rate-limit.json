@@ -1,0 +1,9 @@
+{
+  "id": "rate-limit",
+  "description": "Rate limiting reaction applies rate window restrictions without denying all traffic",
+  "reactionClass": "rate_limit",
+  "target": "source:198.51.100.10",
+  "windowMs": 60000,
+  "maxRequests": 60,
+  "expectedDisruptiveness": 2
+}
