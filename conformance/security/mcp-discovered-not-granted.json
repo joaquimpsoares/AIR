@@ -1,0 +1,10 @@
+{
+  "name": "mcp-discovered-not-granted",
+  "discovered": ["read_project", "delete_project"],
+  "grants": ["connector:mcp_proj:action:read_project:invoke"],
+  "invoke": "delete_project",
+  "expected": {
+    "allowed": false,
+    "errorCode": "AIR_CONNECTOR_DENIED"
+  }
+}

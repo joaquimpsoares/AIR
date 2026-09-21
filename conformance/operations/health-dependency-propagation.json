@@ -1,0 +1,19 @@
+{
+  "id": "health-dependency-propagation",
+  "description": "Dependency recovery automatically propagates to dependent application without restarting the runtime",
+  "topology": {
+    "runtime": "air_runtime",
+    "app": "customer_manager",
+    "dependency": "postgres:crm"
+  },
+  "initialStates": {
+    "postgres:crm": "unhealthy",
+    "customer_manager": "degraded",
+    "air_runtime": "healthy"
+  },
+  "afterDependencyRecovered": {
+    "postgres:crm": "healthy",
+    "customer_manager": "healthy",
+    "air_runtime": "healthy"
+  }
+}

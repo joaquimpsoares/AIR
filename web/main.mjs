@@ -1,4 +1,5 @@
 import { mountAirApp, renderFatalError } from "./runtime/ui.mjs";
+import { OperationalError, OPERATIONAL_ERROR_CODES } from "./runtime/operations.mjs";
 
 const demos = Object.freeze({
   customers: { label: "Northstar CRM", source: "../apps/customer-manager.air", seed: "../data/customer-manager.seed.json", principal: { roles: ["admin"] } },
@@ -16,8 +17,20 @@ try {
     fetch(demos[selected].source),
     fetch(demos[selected].seed)
   ]);
-  if (!appResponse.ok) throw new Error(`Could not load application intent (${appResponse.status})`);
-  if (!seedResponse.ok) throw new Error(`Could not load seed data (${seedResponse.status})`);
+  if (!appResponse.ok) {
+    throw new OperationalError(
+      OPERATIONAL_ERROR_CODES.REPRESENTATION_NOT_FOUND,
+      `Could not load application representation (${appResponse.status})`,
+      { component: "application_representation", requestId: `req_${Date.now()}` }
+    );
+  }
+  if (!seedResponse.ok) {
+    throw new OperationalError(
+      OPERATIONAL_ERROR_CODES.DATA_SOURCE_UNAVAILABLE,
+      `Could not load seed data (${seedResponse.status})`,
+      { component: "seed_storage", requestId: `req_${Date.now()}` }
+    );
+  }
   const [source, seedSource] = await Promise.all([appResponse.text(), seedResponse.text()]);
   mountAirApp(root, source, {
     demo: selected,

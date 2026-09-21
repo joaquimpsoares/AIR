@@ -1,0 +1,9 @@
+{
+  "name": "ai-metadata-only",
+  "grants": ["data:*:customers:read"],
+  "aiAction": "read_records",
+  "expected": {
+    "allowed": false,
+    "errorCode": "AIR_AI_CONTEXT_DENIED"
+  }
+}

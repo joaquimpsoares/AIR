@@ -1,0 +1,11 @@
+{
+  "id": "dependency-timeout",
+  "description": "Connector timeout marks connector degraded and triggers bounded retry",
+  "component": "connector:accounting",
+  "failureCode": "AIR_CONNECTOR_TIMEOUT",
+  "expectedHealth": {
+    "connector:accounting": "degraded"
+  },
+  "expectedRetryable": true,
+  "expectedRestartEligible": false
+}

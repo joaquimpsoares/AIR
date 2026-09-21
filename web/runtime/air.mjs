@@ -1,5 +1,63 @@
 export const AIR_VERSION = 2;
 export { compilePresentation, serializePresentationIr, EXPERIENCE_REGISTRY, PRESENTATION_IR_VERSION } from "./presentation.mjs";
+export { FAILURE_CATEGORIES, AdapterError, SchemaMapping, validateIdentifier, DataAdapter, MemoryDataAdapter, SqliteDataAdapter, PostgresDataAdapter } from "./data.mjs";
+export { EventEnvelope, ConnectorManifest, Connector, RestConnectorAdapter, McpConnectorAdapter, ConnectorRegistry } from "./connector.mjs";
+export {
+  SECURITY_ERROR_CODES,
+  SecurityError,
+  FIELD_CLASSIFICATIONS,
+  AUTHORITY_CLASSES,
+  RedactionEngine,
+  globalRedactor,
+  SecretHandle,
+  SecretProvider,
+  DevelopmentSecretProvider,
+  Capability,
+  CapabilitySet,
+  SecurityAuditLogger,
+  globalAuditLogger,
+  TrustedAdapterDefinition,
+  TrustedAdapterRegistry,
+  globalTrustedRegistry,
+  NetworkDestinationPolicy,
+  CapabilityEngine,
+  deriveRequestedCapabilities,
+  inspectCapabilities,
+  inspectSecurity,
+  diffCapabilities
+} from "./security.mjs";
+
+export {
+  OPERATIONAL_ERROR_CODES,
+  EVENT_TYPES,
+  SEVERITY_LEVELS,
+  HEALTH_STATES,
+  COMPONENT_TYPES,
+  CIRCUIT_STATES,
+  USER_IMPACT,
+  INCIDENT_STATUS,
+  FAILURE_CLASSIFICATIONS,
+  OperationalError,
+  OperationalEvent,
+  Incident,
+  CircuitBreaker,
+  RESILIENCE_PROFILES,
+  DEPLOYMENT_SAFETY_LIMITS,
+  ResiliencePolicy,
+  RecoveryBudget,
+  SingleFlight,
+  RecoveryAdapter,
+  TestRecoveryAdapter,
+  HealthManager,
+  OperationalStore,
+  FailureInjector,
+  OperationalEngine
+} from "./operations.mjs";
+
+import { FIELD_CLASSIFICATIONS, globalRedactor } from "./security.mjs";
+import { OPERATIONAL_ERROR_CODES, OperationalError, FAILURE_CLASSIFICATIONS } from "./operations.mjs";
+
+
 
 
 const DECLARATION_KEYS = Object.freeze({
@@ -1220,9 +1278,17 @@ export class AppRuntime {
     this.idFactory = options.idFactory ?? ((resourceId) => `${resourceId.slice(0, 3)}_${globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10)}`);
     this.storage = model.capabilities.has("storage.local") ? (options.storage ?? new MemoryStorage()) : new MemoryStorage();
     this.principal = options.principal ?? { roles: [] };
+    this.dataAdapters = options.dataAdapters instanceof Map
+      ? options.dataAdapters
+      : (options.dataAdapter ? new Map([["*", options.dataAdapter]]) : new Map());
+    this.capabilityEngine = options.capabilityEngine ?? null;
     this.seedData = options.seedData instanceof Map ? options.seedData : parseSeedData(options.seedData ?? {}, model, { clock: this.clock });
     this.data = new Map();
     this.load();
+  }
+
+  adapter(resourceId) {
+    return this.dataAdapters.get(resourceId) ?? this.dataAdapters.get("*") ?? null;
   }
 
   key(resourceId) { return `air:${this.model.app.id}:${resourceId}:v${this.model.version}`; }
@@ -1355,6 +1421,57 @@ export class AppRuntime {
 
   assertCan(resourceId, action, record = null) {
     if (!this.can(resourceId, action, record)) throw new AirError(`current principal is not permitted to ${action} ${resourceId}`);
+    if (this.capabilityEngine) {
+      const actionMap = { view: "read", create: "create", edit: "update", delete: "delete", archive: "delete" };
+      const capAction = actionMap[action] ?? action;
+      this.capabilityEngine.assertCapability(`data:*:${resourceId}:${capAction}`, {
+        actor: this.principal.actor ?? "user",
+        operation: `${resourceId}.${action}`
+      });
+    }
+  }
+
+  toAiContext(options = {}) {
+    const summary = {
+      app: this.model.app?.title ?? this.model.app?.id,
+      version: this.model.version,
+      entities: [...this.model.entities.values()].map((e) => ({
+        id: e.id,
+        label: e.label,
+        fields: e.fields.map((f) => ({
+          id: f.id,
+          type: f.type,
+          label: f.label,
+          classification: f.classification ?? FIELD_CLASSIFICATIONS.INTERNAL
+        }))
+      }))
+    };
+
+    if (options.includeRecords) {
+      if (this.capabilityEngine) {
+        this.capabilityEngine.assertCapability("ai:data:*:read", { actor: "ai", operation: "read_records" });
+      }
+      summary.records = {};
+      for (const [resId, list] of this.data.entries()) {
+        summary.records[resId] = list.map((rec) => {
+          const sanitized = {};
+          const entity = this.model.entities.get(resId);
+          for (const [k, v] of Object.entries(rec)) {
+            const field = entity?.fieldMap.get(k);
+            if (field?.classification === FIELD_CLASSIFICATIONS.SECRET) {
+              sanitized[k] = "[REDACTED_SECRET]";
+            } else if (field?.classification === FIELD_CLASSIFICATIONS.SENSITIVE && !options.allowSensitive) {
+              sanitized[k] = "[REDACTED_SENSITIVE]";
+            } else {
+              sanitized[k] = v;
+            }
+          }
+          return sanitized;
+        });
+      }
+    }
+
+    return globalRedactor.redactObject(summary);
   }
 
   validate(resourceId, values, currentId = null, records = null) {
@@ -1391,6 +1508,10 @@ export class AppRuntime {
   commit(resourceId, records) {
     this.storage.setItem(this.key(resourceId), JSON.stringify(records));
     this.data.set(resourceId, records);
+    const adapter = this.adapter(resourceId);
+    if (adapter && typeof adapter.syncFromRuntime === "function") {
+      adapter.syncFromRuntime(resourceId, records);
+    }
   }
 
   create(resourceId, values) {

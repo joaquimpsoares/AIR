@@ -1,0 +1,10 @@
+{
+  "id": "recovery-failure",
+  "description": "Restart where healthcheck fails post-recovery is classified as failed and keeps incident open",
+  "component": "managed_runtime",
+  "action": "restart",
+  "restartSucceeds": false,
+  "postCheckHealthy": false,
+  "expectedOutcome": "failed",
+  "expectedIncidentStatus": "open"
+}

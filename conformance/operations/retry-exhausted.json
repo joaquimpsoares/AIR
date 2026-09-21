@@ -1,0 +1,10 @@
+{
+  "id": "retry-exhausted",
+  "description": "Continuous failure exhausts retries and emits failure without infinite loops",
+  "component": "postgres:crm",
+  "operation": "query",
+  "maxRetries": 2,
+  "failuresBeforeSuccess": 999,
+  "expectedOutcome": "exhausted",
+  "expectedTotalAttempts": 3
+}

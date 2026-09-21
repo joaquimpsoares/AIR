@@ -1,0 +1,9 @@
+{
+  "name": "connector-action-deny",
+  "grants": ["connector:stripe:action:charge:invoke"],
+  "check": "connector:stripe:action:refund:invoke",
+  "expected": {
+    "allowed": false,
+    "errorCode": "AIR_CONNECTOR_DENIED"
+  }
+}

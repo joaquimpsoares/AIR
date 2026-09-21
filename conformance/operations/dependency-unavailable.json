@@ -1,0 +1,16 @@
+{
+  "id": "dependency-unavailable",
+  "description": "External data source down marks dependency unhealthy, propagates degraded to app, keeps runtime healthy",
+  "component": "postgres:crm",
+  "failureCode": "AIR_DATA_SOURCE_UNAVAILABLE",
+  "dependencies": {
+    "customer_manager": ["air_runtime", "postgres:crm"]
+  },
+  "expectedHealth": {
+    "postgres:crm": "unhealthy",
+    "customer_manager": "degraded",
+    "air_runtime": "healthy"
+  },
+  "expectedRestartEligible": false,
+  "expectedRetryable": true
+}

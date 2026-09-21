@@ -1,11 +1,76 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { explainModel, parseAir, semanticDiff, workflowDiagram } from "../web/runtime/air.mjs";
+import {
+  explainModel,
+  parseAir,
+  semanticDiff,
+  workflowDiagram,
+  inspectCapabilities,
+  inspectSecurity,
+  diffCapabilities,
+  OperationalEngine,
+  HealthManager,
+  OperationalStore,
+  FailureInjector,
+  HEALTH_STATES,
+  COMPONENT_TYPES,
+  OPERATIONAL_ERROR_CODES,
+  Incident,
+  globalRedactor
+} from "../web/runtime/air.mjs";
 import { formatCapabilitySelection, parseCapabilityCatalog, searchCapabilities } from "./capabilities.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 
+// Shared default operational engine for CLI inspection
+function createCliEngine() {
+  const health = new HealthManager();
+  health.registerComponent({ id: "air_runtime", type: COMPONENT_TYPES.RUNTIME, initialState: HEALTH_STATES.HEALTHY, restartable: true });
+  health.registerComponent({ id: "postgres:crm", type: COMPONENT_TYPES.DATA_SOURCE, initialState: HEALTH_STATES.HEALTHY, restartable: false });
+  health.registerComponent({ id: "connector:rest", type: COMPONENT_TYPES.CONNECTOR, initialState: HEALTH_STATES.HEALTHY, restartable: false });
+  health.registerComponent({ id: "customer_manager", type: COMPONENT_TYPES.APPLICATION, initialState: HEALTH_STATES.HEALTHY, dependencies: ["air_runtime", "postgres:crm"] });
+
+  const store = new OperationalStore();
+  const engine = new OperationalEngine({ healthManager: health, store });
+  return engine;
+}
+
 async function main() {
+  if (command === "status") {
+    const engine = createCliEngine();
+    const snapshot = engine.getOperatorSnapshot();
+    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
+    return;
+  }
+  if (command === "health") {
+    const engine = createCliEngine();
+    const snapshot = engine.healthManager.getSnapshot();
+    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
+    return;
+  }
+  if (command === "incidents" && args.length === 0) {
+    const engine = createCliEngine();
+    const openIncidents = engine.store.queryIncidents();
+    process.stdout.write(JSON.stringify(openIncidents, null, 2) + "\n");
+    return;
+  }
+  if (command === "incident" && args[0]) {
+    const engine = createCliEngine();
+    const inc = engine.store.getIncident(args[0]);
+    if (!inc) {
+      process.stdout.write(JSON.stringify({ error: `Incident ${args[0]} not found` }, null, 2) + "\n");
+      return;
+    }
+    process.stdout.write(JSON.stringify(inc.toJSON(), null, 2) + "\n");
+    return;
+  }
+  if (command === "test-failure" && args[0]) {
+    const injector = new FailureInjector({ isProduction: false });
+    injector.inject(args[0], { count: 1 });
+    const triggered = injector.shouldFail(args[0]);
+    process.stdout.write(JSON.stringify({ scenario: args[0], injected: true, triggered }, null, 2) + "\n");
+    return;
+  }
   if (command === "capabilities" && args.shift() === "search") {
     const source = await readFile(new URL("../CAPABILITIES.aircat", import.meta.url), "utf8");
     const catalog = parseCapabilityCatalog(source);
@@ -25,12 +90,30 @@ async function main() {
     process.stdout.write(`${workflowDiagram(await readFile(args[0], "utf8"))}\n`);
     return;
   }
+  if (command === "inspect" && args[0] === "capabilities" && args[1]) {
+    const model = parseAir(await readFile(args[1], "utf8"));
+    const inspection = inspectCapabilities(model);
+    process.stdout.write(JSON.stringify(inspection, null, 2) + "\n");
+    return;
+  }
+  if (command === "inspect" && args[0] === "security" && args[1]) {
+    const model = parseAir(await readFile(args[1], "utf8"));
+    const sec = inspectSecurity(model);
+    process.stdout.write(sec.toHumanString() + "\n");
+    return;
+  }
+  if (command === "inspect" && args[0] === "capability-diff" && args[1] && args[2]) {
+    const [before, after] = await Promise.all([readFile(args[1], "utf8"), readFile(args[2], "utf8")]);
+    const diff = diffCapabilities(parseAir(before), parseAir(after));
+    process.stdout.write(diff.toHumanString() + "\n");
+    return;
+  }
   if (command === "check" && args.length === 1) {
     const model = parseAir(await readFile(args[0], "utf8"));
     process.stdout.write(`valid AIR v${model.version}: ${model.app.id}\n`);
     return;
   }
-  throw new Error("usage: air capabilities search <query> | air explain <app.air> | air workflow <app.air> | air diff <old.air> <new.air> | air check <app.air>");
+  throw new Error("usage: air status | air health | air incidents | air incident <id> | air test-failure <scenario> | air capabilities search <query> | air inspect capabilities <app.air> | air inspect security <app.air> | air inspect capability-diff <old.air> <new.air> | air explain <app.air> | air workflow <app.air> | air diff <old.air> <new.air> | air check <app.air>");
 }
 
 main().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });

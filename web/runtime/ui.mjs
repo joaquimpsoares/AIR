@@ -73,7 +73,26 @@ function themePreference(theme) {
 
 export function renderFatalError(root, error) {
   root.removeAttribute("aria-busy");
-  root.innerHTML = `<main class="fatal"><div class="fatal-mark">!</div><p class="eyebrow">AIR runtime error</p><h1>This application could not start</h1><p>${escapeHtml(error?.message ?? error)}</p><button class="button secondary" onclick="location.reload()">Try again</button></main>`;
+  let userError = null;
+  if (error && typeof error.toUserError === "function") {
+    userError = error.toUserError();
+  } else if (error && error.name === "OperationalError") {
+    userError = {
+      title: error.safeUserTitle || "Application Unavailable",
+      message: error.safeUserMessage || "The application encountered an operational error.",
+      reference: error.requestId || error.incidentId || `ref_${Date.now()}`
+    };
+  } else {
+    const rawMsg = error?.message ?? String(error);
+    const is404 = rawMsg.includes("404") || rawMsg.includes("not found");
+    userError = {
+      title: is404 ? "Application Unavailable" : "Application Error",
+      message: is404 ? "The application definition could not be loaded." : "This application could not start.",
+      reference: `ref_${Date.now().toString(36)}`
+    };
+  }
+
+  root.innerHTML = `<main class="fatal"><div class="fatal-mark">!</div><p class="eyebrow">AIR Service State</p><h1>${escapeHtml(userError.title)}</h1><p>${escapeHtml(userError.message)}</p><p class="meta" style="font-size: 0.85em; opacity: 0.75;">Reference: <code>${escapeHtml(userError.reference)}</code></p><button class="button secondary" onclick="location.reload()">Try again</button></main>`;
 }
 
 /**

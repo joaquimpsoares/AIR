@@ -1,0 +1,10 @@
+{
+  "name": "data-write-deny",
+  "grants": ["data:*:customers:read"],
+  "operation": "create",
+  "resource": "customers",
+  "expected": {
+    "allowed": false,
+    "errorCode": "AIR_DATA_DENIED"
+  }
+}

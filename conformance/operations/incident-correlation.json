@@ -1,0 +1,10 @@
+{
+  "id": "incident-correlation",
+  "description": "Multiple identical operational failures within correlation window map to a single incident",
+  "component": "postgres:crm",
+  "failureCode": "AIR_DATA_SOURCE_TIMEOUT",
+  "eventCount": 50,
+  "correlationWindowMs": 60000,
+  "expectedIncidentCount": 1,
+  "expectedEventCountInIncident": 50
+}

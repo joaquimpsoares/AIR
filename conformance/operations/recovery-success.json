@@ -1,0 +1,12 @@
+{
+  "id": "recovery-success",
+  "description": "Authorized restart followed by verified healthy health check resolves the incident",
+  "component": "managed_runtime",
+  "action": "restart",
+  "policyAllows": true,
+  "capabilityGranted": true,
+  "restartSucceeds": true,
+  "postCheckHealthy": true,
+  "expectedOutcome": "succeeded",
+  "expectedIncidentStatus": "resolved"
+}

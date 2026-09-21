@@ -1,0 +1,14 @@
+{
+  "id": "representation-invalid",
+  "description": "Invalid application AIR syntax fails closed without restarting the runtime",
+  "component": "application_representation",
+  "failureCode": "AIR_REPRESENTATION_INVALID",
+  "httpStatus": 400,
+  "expectedHealth": {
+    "application_representation": "unhealthy",
+    "air_runtime": "healthy"
+  },
+  "expectedRestartEligible": false,
+  "expectedRetryable": false,
+  "expectedIncidentStatus": "open"
+}

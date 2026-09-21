@@ -1,0 +1,9 @@
+{
+  "name": "data-read-allow",
+  "grants": ["data:*:customers:read"],
+  "operation": "read",
+  "resource": "customers",
+  "expected": {
+    "allowed": true
+  }
+}

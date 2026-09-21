@@ -1,0 +1,9 @@
+{
+  "name": "capability-deny",
+  "grants": ["data:crm:customers:read"],
+  "check": "data:crm:customers:delete",
+  "expected": {
+    "allowed": false,
+    "errorCode": "AIR_DATA_DENIED"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "circuit-close",
+  "description": "Successful probe in half-open state closes the circuit and resets failure counters",
+  "component": "connector:rest",
+  "initialState": "half_open",
+  "probeSuccess": true,
+  "expectedCircuitState": "closed",
+  "expectedConsecutiveFailures": 0
+}

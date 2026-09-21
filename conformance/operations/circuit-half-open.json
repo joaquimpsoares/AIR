@@ -1,0 +1,9 @@
+{
+  "id": "circuit-half-open",
+  "description": "After cooldown period expires, circuit transitions to half-open and permits one probe request",
+  "component": "connector:rest",
+  "failureThreshold": 3,
+  "cooldownMs": 1000,
+  "expectedStateAfterCooldown": "half_open",
+  "expectedSingleProbeAllowed": true
+}

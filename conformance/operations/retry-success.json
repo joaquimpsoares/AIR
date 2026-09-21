@@ -1,0 +1,10 @@
+{
+  "id": "retry-success",
+  "description": "Transient failure succeeds on retry attempt within budget",
+  "component": "postgres:crm",
+  "operation": "query",
+  "maxRetries": 3,
+  "failuresBeforeSuccess": 2,
+  "expectedOutcome": "success",
+  "expectedTotalAttempts": 3
+}

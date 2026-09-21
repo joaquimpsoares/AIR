@@ -1,0 +1,10 @@
+{
+  "id": "restart-budget-exhausted",
+  "description": "Exceeding maximum restart attempts triggers recovery.exhausted and leaves incident unresolved",
+  "component": "managed_runtime",
+  "action": "restart",
+  "maxRestartAttempts": 3,
+  "attemptedCount": 4,
+  "expectedOutcome": "exhausted",
+  "expectedErrorCode": "AIR_RECOVERY_EXHAUSTED"
+}

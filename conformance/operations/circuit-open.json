@@ -1,0 +1,9 @@
+{
+  "id": "circuit-open",
+  "description": "Exceeding failure threshold opens circuit breaker and fails subsequent requests fast",
+  "component": "connector:rest",
+  "failureThreshold": 3,
+  "consecutiveFailures": 3,
+  "expectedCircuitState": "open",
+  "expectedFastFail": true
+}

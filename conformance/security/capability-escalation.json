@@ -1,0 +1,9 @@
+{
+  "name": "capability-escalation",
+  "base": ["data:*:invoices:read", "data:*:invoices:create"],
+  "target": ["data:*:invoices:read", "data:*:invoices:create", "data:*:payments:create"],
+  "expected": {
+    "hasEscalation": true,
+    "added": ["data:*:payments:create"]
+  }
+}

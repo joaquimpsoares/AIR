@@ -1,0 +1,15 @@
+{
+  "id": "representation-not-found",
+  "description": "Missing application representation creates classified incident, marks representation unhealthy, leaves runtime healthy with NO restart",
+  "component": "application_representation",
+  "failureCode": "AIR_REPRESENTATION_NOT_FOUND",
+  "httpStatus": 404,
+  "expectedHealth": {
+    "application_representation": "unhealthy",
+    "air_runtime": "healthy"
+  },
+  "expectedRestartEligible": false,
+  "expectedRetryable": false,
+  "expectedIncidentStatus": "open",
+  "safeUserMessage": "The application definition could not be loaded."
+}

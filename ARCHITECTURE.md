@@ -114,7 +114,7 @@ The workflow experiment kept application mechanics out of AIR, but exposed mater
 
 ## Converged compiler boundary
 
-AIR v2 is now frozen in [the authoritative specification](spec/AIR-V2.md) and
+AIR v2 is frozen in [the authoritative specification](spec/AIR-V2.md) and
 the shared `conformance/` corpus. JavaScript and Rust emit the same canonical
 semantic IR; Rust lowers that IR to versioned AIR2 and packages it with the Wasm
 semantic runtime. AIR source, canonical IR, AIR2, and Wasm remain distinct.
@@ -122,3 +122,28 @@ semantic runtime. AIR source, canonical IR, AIR2, and Wasm remain distinct.
 The two semantic engines coexist only as a convergence step. See
 `MIGRATION.md` for the staged move to one Rust/Wasm engine with JavaScript as the
 browser renderer and host adapter.
+
+## Universal Data Layer & Connectors
+
+AIR applications state **what** data entity and relationships they require, not **how** storage engines or protocols connect:
+- **`DataAdapter` Contract:** Uniform async interface (`get`, `find`, `create`, `update`, `delete`, `query`, `count`, `aggregate`, `transaction`).
+- **Implementations:** `MemoryDataAdapter`, `SqliteDataAdapter` (via `node:sqlite`), and `PostgresDataAdapter` (with parameterized query builders and SQL identifier validation).
+- **Universal Connectors:** `RestConnectorAdapter` and `McpConnectorAdapter` exposing typed resources, actions, and events.
+
+## Security & Capability Engine (Deny-by-Default)
+
+See [`SECURITY.md`](SECURITY.md) for complete details.
+- **Opaque Secrets (`SecretHandle`):** Private class fields prevent reflection and serialization leakage into AIR source, logs, or Presentation IR.
+- **Two-Key Authorization:** An action requires BOTH Semantic Business Authority (`access`, `by`, `separate`) AND Infrastructure Capabilities (`CapabilitySet`).
+- **Network Destination Policy:** Outbound HTTP connectors enforce private IP blocking and intercept 3xx redirects to prevent SSRF bypasses.
+- **MCP Authority Isolation:** Dynamic tool discovery (`list_tools`) does NOT grant execution rights; execution requires explicit capability grants.
+
+## Structured Observability & Deterministic Bounded Resilience
+
+See [`OPERATIONS.md`](OPERATIONS.md) for complete details.
+- **Component Health & Dependency Graph:** Independent component health states (`healthy`, `degraded`, `unhealthy`, `unknown`). Upstream dependency failure (e.g. Postgres down) degrades the dependent application while the AIR runtime remains healthy.
+- **Deterministic Incident Correlation:** Correlates repeated failure events within sliding time windows into single incidents.
+- **Bounded Resilience:** Clock-driven Circuit Breakers (`closed` -> `open` -> `half_open` -> `closed`), exponential backoff retries with mutation idempotency validation, single-flight recovery coalescing, and recovery budgets.
+- **Two-Key Recovery Authorization:** Privileged actions (`restart`) require policy eligibility AND operational capability grants, followed by mandatory post-recovery health checks before declaring success.
+- **AI Diagnostic Context (Read-Only):** Sanitized, frozen incident snapshots with zero action handles and zero secret leakage.
+

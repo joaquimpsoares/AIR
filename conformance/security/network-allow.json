@@ -1,0 +1,8 @@
+{
+  "name": "network-allow",
+  "policy": ["api.stripe.com:443"],
+  "destination": "https://api.stripe.com/v1/charges",
+  "expected": {
+    "allowed": true
+  }
+}

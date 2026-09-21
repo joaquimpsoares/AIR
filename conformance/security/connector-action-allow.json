@@ -1,0 +1,8 @@
+{
+  "name": "connector-action-allow",
+  "grants": ["connector:stripe:action:charge:invoke"],
+  "check": "connector:stripe:action:charge:invoke",
+  "expected": {
+    "allowed": true
+  }
+}

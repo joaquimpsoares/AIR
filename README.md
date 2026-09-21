@@ -1,15 +1,17 @@
 # AIR — Application Intent Representation
 
-AIR is a declarative, compact semantic application language and compiler. It eliminates boilerplate by expressing pure business intent—data entities, relationships, workflow state machines, access policies, and standard presentation experiences—while delegating presentation, validation, state transitions, and persistence to an authoritative compiler and runtime.
+AIR is a declarative, compact semantic application language, compiler, and resilient runtime. It eliminates boilerplate by expressing pure business intent—data entities, relationships, workflow state machines, access policies, universal data/connectors, and standard presentation experiences—while delegating presentation, validation, authorization, secrets, health, and deterministic bounded resilience to an authoritative host.
 
 ```
 AIR Source (.air)
       ↓
 Semantic Compiler (Rust / JS)
       ↓
-Presentation Compiler (Presentation IR v1)
+Presentation Compiler (Presentation IR v1) + Capability / Security Engine
       ↓
-Web Renderer / Wasm Runtime / Native Shell
+Universal Data Layer (SQLite / Postgres) + Connectors (REST / MCP)
+      ↓
+Structured Observability + Bounded Deterministic Resilience (Circuit Breaker / Retries)
 ```
 
 ---
@@ -19,6 +21,7 @@ Web Renderer / Wasm Runtime / Native Shell
 ### 1. Requirements
 - Node.js 22+ (for web development runtime & test runner)
 - Rust 1.80+ (optional, for native `airc` compiler and Wasm compilation)
+- Docker (optional, for live PostgreSQL integration tests)
 
 ### 2. Run the Development Server
 ```bash
@@ -69,11 +72,11 @@ npm run air -- explain myapp.air
 
 ---
 
-## CLI & Compiler Tools
+## CLI & Operator Tooling
 
-### JavaScript Tooling
+### Semantic & Capability Inspection
 ```bash
-# Semantic validation and type checking
+# Static semantic check & validation
 npm run air -- check <file.air>
 
 # Generate human-readable semantic explanation
@@ -82,11 +85,32 @@ npm run air -- explain <file.air>
 # Generate Mermaid workflow diagram for process state machines
 npm run air -- workflow <file.air>
 
-# Query capabilities catalog
-npm run air -- capabilities search "approval workflow"
+# Inspect requested infrastructure capabilities & classifications
+npm run air -- inspect capabilities <file.air>
 
-# Compute semantic diff between two AIR models
-npm run air -- diff old.air new.air
+# Inspect application security posture & secret references
+npm run air -- inspect security <file.air>
+
+# Compare capability diffs between versions (detect privilege escalation)
+npm run air -- inspect capability-diff old.air new.air
+```
+
+### Operational Observability & Health
+```bash
+# Snapshot runtime health, component topology, and open incidents
+npm run air -- status
+
+# Inspect individual component health states & dependency propagation
+npm run air -- health
+
+# Query open and resolved operational incidents
+npm run air -- incidents
+
+# Inspect detailed incident timeline and recovery status
+npm run air -- incident <incident_id>
+
+# Run development failure simulation (test mode only)
+npm run air -- test-failure rest-timeout
 ```
 
 ### Rust Compiler (`airc`) & Wasm
@@ -106,40 +130,52 @@ cargo run -p air-cli -- build-wasm apps/expense-approval.air -o dist/expense-app
 
 ---
 
-## Reference Applications (`apps/`)
+## Architectural Layers & Documentation
 
-Reference applications illustrating diverse semantic patterns are located in the [`apps/`](/apps) directory:
+AIR is structured into distinct, decoupled architectural layers:
+
+1. **Authoritative Specification & Semantic Core:** [AIR-V2.md](spec/AIR-V2.md) & [ARCHITECTURE.md](ARCHITECTURE.md)
+2. **Security & Capabilities (Deny-by-Default):** [SECURITY.md](SECURITY.md)
+   - Opaque `SecretHandle` preventing credential leakage into AIR source or logs.
+   - Two-Key Authorization (Semantic Authority + Infrastructure Capabilities).
+   - Network Destination Policies with SSRF & redirect re-authorization.
+   - Dynamic MCP Tool discovery decoupled from execution grants.
+3. **Structured Observability & Bounded Resilience:** [OPERATIONS.md](OPERATIONS.md)
+   - Component Health Registry & Dependency Graph propagation (DB down degrades app, runtime stays healthy).
+   - Deterministic Event & Incident Correlation (50 errors -> 1 incident).
+   - Bounded Exponential Backoff Retries & Clock-Driven Circuit Breakers.
+   - Two-Key Recovery Authorization & Mandatory Post-Recovery Health Verification.
+   - Read-Only AI Diagnostic Context (`incident.toDiagnosticContext()`).
+4. **Universal Data Layer & Connectors:**
+   - In-Memory, SQLite, and live PostgreSQL DataAdapters with SQL injection protection.
+   - REST and Model Context Protocol (MCP) Connector integrations.
+5. **Presentation IR & Experience Library:**
+   - Platform-neutral intermediate representation for web, mobile, and native shells.
+   - High-level composite experiences: `resource.management`, `workflow.inbox`, `auth.standard`, `user.management`.
+
+---
+
+## Reference Applications (`apps/`)
 
 | Application | File | Focus & Primitives Demonstrated |
 | :--- | :--- | :--- |
 | **Experience Hub** | [`apps/experience-demo.air`](/apps/experience-demo.air) | Composite `auth.standard` lifecycle (registration, verification, password recovery, session revocation) and `user.management` admin experience. |
-| **Northstar CRM** | [`apps/customer-manager.air`](/apps/customer-manager.air) | Resource management, scoped role authorization, reference relationships, lifecycle archival, aggregates. |
+| **Northstar CRM** | [`apps/customer-manager.air`](/apps/customer-manager.air) | Resource management, scoped role authorization, reference relationships, lifecycle archival, aggregates, SQLite & PostgreSQL persistence. |
 | **Expense Approval** | [`apps/expense-approval.air`](/apps/expense-approval.air) | Multi-stage workflow, separation of duty, multi-signature evidence, deadline escalation, immutable decisions. |
 | **Lattice Tasks** | [`apps/task-board.air`](/apps/task-board.air) | Relational multi-resource task board with assigned owners and status tags. |
 | **Content Publishing** | [`apps/content-publishing.air`](/apps/content-publishing.air) | Multi-role editorial publishing workflow with rejection commentary and review gates. |
 
 ---
 
-## Experience Library
-
-AIR provides high-level composite **Experiences** that project platform-neutral UI contracts into the Presentation IR:
-
-- **`resource.management`**: Derives list, detail, filtering, search, sorting, modal creation, and CRUD actions.
-- **`workflow.inbox`**: Derives an actor-adaptive inbox of actionable items awaiting user transition approval.
-- **`auth.standard`**: Reusable composite authentication, identity verification, password recovery, and session management.
-- **`user.management`**: Administrator account management and role administration.
-
----
-
 ## Testing & Verification
 
-Run the full dual-runtime verification suite:
+AIR maintains a strict test suite verifying semantic parity, security boundaries, and operational resilience:
 
 ```bash
-# Run JavaScript unit and integration test suite
+# Run complete Node.js test suite (104 tests)
 npm test
 
-# Run Rust compiler & conformance test suite
+# Run Rust compiler & conformance test suite (31 tests)
 npm run test:rust
 
 # Run cross-engine dual conformance verification
@@ -148,12 +184,3 @@ npm run test:dual
 # Execute all static, semantic, and runtime checks
 npm run check
 ```
-
----
-
-## Architecture & Design Principles
-
-1. **Pure Intent Separation**: Application code (`.air`) declares *what* the application does, never HTML/CSS styling or DOM manipulation.
-2. **Deterministic & Self-Contained**: No external network dependencies, no implicit side effects, and fully reproducible runtime evaluation.
-3. **Decoupled Presentation IR**: The presentation compiler derives a platform-neutral intermediate representation (IR v1) consumed by Web, Wasm, or native renderers.
-4. **Authority Below the UI**: Security, invariants, and authorization policies are strictly enforced in the engine core, never in client presentation code.

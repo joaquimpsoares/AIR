@@ -1,0 +1,8 @@
+{
+  "name": "capability-allow",
+  "grants": ["data:crm:customers:read"],
+  "check": "data:crm:customers:read",
+  "expected": {
+    "allowed": true
+  }
+}
