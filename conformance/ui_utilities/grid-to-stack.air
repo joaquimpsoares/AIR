@@ -1,0 +1,6 @@
+air version=2
+app grid_to_stack_fixture title="Grid to Stack Responsive Test" subtitle="Validates multi-column grid collapsing to single column stack at narrow width"
+resource metrics label=name
+field metrics.name text required
+manage metrics
+experience marketing.landing headline="Predictable Metrics" tagline="Scale with deterministic invariants"

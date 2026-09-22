@@ -1,0 +1,6 @@
+air version=2
+app comparison_section_conformance title="Comparison Section Conformance" subtitle="Validates multi-tier feature matrix and pricing comparison section"
+resource plans label=name
+field plans.name text required
+manage plans
+experience marketing.landing headline="Transparent Pricing Plans" tagline="Predictable scaling from prototype to high-throughput enterprise cluster."

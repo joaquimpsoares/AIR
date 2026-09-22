@@ -1,0 +1,6 @@
+air version=2
+app marketing_hero_conformance title="Hero Only Conformance App"
+resource inquiries label=name
+field inquiries.name text required
+manage inquiries
+experience marketing.hero headline="Standalone Hero Experience" tagline="Verifies single marketing hero section projection" primary_action="Launch" primary_action_url="/app"

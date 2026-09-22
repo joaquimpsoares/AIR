@@ -1,0 +1,6 @@
+air version=2
+app reduced_motion_fixture title="Reduced Motion Test" subtitle="Validates motion suppression when accessibility preference is active"
+resource settings label=name
+field settings.name text required
+manage settings
+experience marketing.landing headline="Accessible Motion" tagline="Graceful degradation for users preferring reduced motion" motion=pointer_follow

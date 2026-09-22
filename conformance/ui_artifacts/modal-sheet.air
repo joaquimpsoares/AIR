@@ -1,0 +1,5 @@
+air version=2
+app modal_sheet_artifact title="Modal Dialog / Sheet Artifact Conformance" subtitle="Validates centered modal on desktop transitioning to bottom sheet on mobile"
+resource items label=title
+field items.title text required
+manage items

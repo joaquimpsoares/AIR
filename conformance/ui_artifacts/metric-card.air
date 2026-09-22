@@ -1,0 +1,8 @@
+air version=2
+app metric_card_artifact title="Metric Card Artifact Conformance" subtitle="Validates KPI metric display artifact with typography scaling"
+resource analytics label=title
+field analytics.title text required
+field analytics.revenue money currency=USD
+manage analytics
+overview title="Analytics Summary"
+insight analytics.total_revenue op=sum field=revenue label="Active Revenue"

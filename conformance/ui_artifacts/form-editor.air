@@ -1,0 +1,7 @@
+air version=2
+app form_editor_artifact title="Form Editor Artifact Conformance" subtitle="Validates multi-column to single-column responsive form editor"
+resource users label=name
+field users.name text required min=3
+field users.email email required
+field users.role enum values=Admin,Manager,Member default=Member
+manage users

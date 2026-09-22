@@ -1,0 +1,6 @@
+air version=2
+app marketing_motion_conformance title="Motion Semantics Conformance App"
+resource inquiries label=name
+field inquiries.name text required
+manage inquiries
+experience marketing.landing headline="Motion Verified App" tagline="Ensures platform-neutral motion semantics and reduced-motion compliance" motion=reveal_on_scroll

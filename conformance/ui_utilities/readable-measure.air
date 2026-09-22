@@ -1,0 +1,6 @@
+air version=2
+app readable_measure_fixture title="Readable Line Measure Test" subtitle="Validates typographic measure constraints between 45 and 75 characters per line"
+resource articles label=title
+field articles.title text required
+manage articles
+experience marketing.landing headline="Typographic Precision" tagline="Optimal editorial reading comfort through automated measure clamping"

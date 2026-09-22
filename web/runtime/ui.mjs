@@ -1,5 +1,6 @@
 import { AirError, AppRuntime, parseAir, parseSeedData } from "./air.mjs";
 import { compilePresentation } from "./presentation.mjs";
+import { compileVisualDesign, VISUAL_DESIGN_IR_VERSION, ARCHETYPES, CHARACTERS, COMPOSITIONS, SHELL_TYPES } from "./visual_design.mjs";
 import { DemoAuthAdapter } from "./auth.mjs";
 
 const ICONS = Object.freeze({
@@ -20,7 +21,8 @@ const ICONS = Object.freeze({
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
   sort: '<path d="m8 9 4-4 4 4M16 15l-4 4-4-4"/>',
   spark: '<path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3ZM5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9L5 15Z"/>',
-  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
 });
 
 function icon(name, size = 18) {
@@ -96,13 +98,22 @@ export function renderFatalError(root, error) {
 }
 
 /**
- * Pure Presentation IR Renderer Entry Point.
- * Renders HTML/DOM directly from Presentation IR v1 and the runtime.
+ * Pure Visual Design IR Web Renderer Entry Point.
+ * Renders HTML/DOM directly from Presentation IR v1 -> Visual Design IR v1 and the runtime.
  * Contains ZERO resource/domain-specific branches.
  */
 export function renderPresentation(root, initialPresentationIr, runtime, options = {}) {
   let presentationIr = initialPresentationIr;
   const authAdapter = options.authAdapter ?? new DemoAuthAdapter();
+
+  let visualDesignIr = compileVisualDesign(
+    presentationIr,
+    options.designIntent ?? options.model?.design ?? {},
+    {
+      prefersReducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+      viewport: typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop"
+    }
+  );
 
   const state = {
     screenId: options.initialScreen ?? presentationIr.app.initialScreen,
@@ -112,6 +123,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     theme: themePreference(presentationIr.theme),
     queries: new Map(),
     toastTimer: null,
+    compilerStep: 1,
+    mobileMenuOpen: false,
     authState: { status: "idle", message: "", email: "", demoToken: "" }
   };
 
@@ -133,13 +146,23 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     if (typeof document === "undefined") return;
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.dataset.accent = presentationIr.theme.accent;
-    document.documentElement.dataset.density = presentationIr.theme.density;
+    document.documentElement.dataset.density = visualDesignIr.theme.density;
+    document.documentElement.dataset.character = visualDesignIr.character;
+    document.documentElement.dataset.archetype = visualDesignIr.archetype;
     document.documentElement.style.colorScheme = state.theme;
   }
 
   function recompileIr() {
     if (options.model) {
       presentationIr = compilePresentation(options.model, { principal: runtime?.principal, runtime });
+      visualDesignIr = compileVisualDesign(
+        presentationIr,
+        options.designIntent ?? options.model?.design ?? {},
+        {
+          prefersReducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+          viewport: typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop"
+        }
+      );
     }
   }
 
@@ -189,10 +212,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
   }
 
   function valueMarkup(screen, fieldId, value, compact = false) {
-    const field = screen.editor?.fields?.find((f) => f.id === fieldId);
-    const display = runtime ? runtime.displayValue(screen.resource, fieldId, value) : String(value ?? "");
+    const field = screen?.editor?.fields?.find((f) => f.id === fieldId);
+    const display = (runtime && screen?.resource) ? runtime.displayValue(screen.resource, fieldId, value) : String(value ?? "");
     if (field?.type === "enum") return `<span class="badge ${statusTone(value)}"><span></span>${escapeHtml(displayStatus(display))}</span>`;
-    if (field?.id === screen.labelField && !compact) {
+    if (field?.id === screen?.labelField && !compact) {
       return `<span class="identity"><span class="avatar">${escapeHtml(initials(display))}</span><strong>${escapeHtml(display)}</strong></span>`;
     }
     return `<span>${escapeHtml(display)}</span>`;
@@ -201,14 +224,14 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
   function renderTable(screen, columns, records, interactive = true) {
     if (!records || records.length === 0) return "";
     const head = columns.map((fieldId) => {
-      const field = screen.editor?.fields?.find((f) => f.id === fieldId);
+      const field = screen?.editor?.fields?.find((f) => f.id === fieldId);
       return `<th scope="col">${escapeHtml(field?.label ?? titleCase(fieldId))}</th>`;
     }).join("");
     const rows = records.map((record) => {
-      const tone = runtime ? runtime.highlight(screen.resource, record) : null;
+      const tone = (runtime && screen?.resource) ? runtime.highlight(screen.resource, record) : null;
       return `
-      <tr class="${tone ? `highlight-${escapeHtml(tone)}` : ""}" ${interactive ? `tabindex="0" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}"` : ""}>
-        ${columns.map((fieldId) => `<td data-label="${escapeHtml(screen.editor?.fields?.find(f => f.id === fieldId)?.label ?? titleCase(fieldId))}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
+      <tr class="${tone ? `highlight-${escapeHtml(tone)}` : ""}" ${interactive && screen?.resource ? `tabindex="0" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}"` : ""}>
+        ${columns.map((fieldId) => `<td data-label="${escapeHtml(screen?.editor?.fields?.find(f => f.id === fieldId)?.label ?? titleCase(fieldId))}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
         ${interactive ? `<td class="row-arrow" aria-label="View record">${icon("chevron", 16)}</td>` : ""}
       </tr>`;
     }).join("");
@@ -685,10 +708,406 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       <section class="panel detail-panel"><div class="panel-heading"><div><p class="eyebrow">Record details</p><h2>Information</h2></div></div><dl>${screen.editor.fields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${valueMarkup(screen, field.id, record[field.id], true)}</dd></div>`).join("")}</dl></section>${historyMarkup}`;
   }
 
+  function highlightCompilerSnippet(code) {
+    if (!code) return "";
+    return escapeHtml(code)
+      .replace(/\b(air version=\d+|app|process|transition|from|to|by|distinct|approvals|state|initial|import|export|const|let|function|return)\b/g, '<span class="tok-kw">$1</span>')
+      .replace(/("schema"|"process"|"states"|"guards"|"screens"|"id"|"type"|"archetype"|"character"|"composition"|"shell"|"version")/g, '<span class="tok-prop">$1</span>')
+      .replace(/\b(draft|approved|paid|manager|finance|distinct_actor|workflow_inbox|product_launch|technical-premium|asymmetric_bento|public|true|false)\b/g, '<span class="tok-val">$1</span>')
+      .replace(/(\/\/[^\n]*)/g, '<span class="tok-comment">$1</span>');
+  }
+
+  function renderHeroSection(section) {
+    const raw = section.rawSection ?? section;
+    const primary = raw.primaryAction;
+    const secondary = raw.secondaryAction;
+    const motionAttr = section.motion ? `data-motion="${escapeHtml(section.motion.type)}"` : "";
+
+    return `<header class="landing-hero motion-spotlight" ${motionAttr} id="hero">
+      <div class="landing-hero-composition">
+        <div class="landing-hero-content">
+          <div class="hero-eyebrow-badge">
+            <span class="hero-badge-dot"></span>
+            <span>Autonomous Intent Architecture</span>
+          </div>
+          <h1 class="landing-hero-headline">${escapeHtml(raw.headline ?? raw.title ?? presentationIr.app.title)}</h1>
+          <p class="landing-hero-tagline">${escapeHtml(raw.tagline ?? raw.subtitle ?? presentationIr.app.subtitle)}</p>
+          <div class="landing-hero-actions">
+            ${primary ? `<a href="${escapeHtml(primary.url)}" class="button primary large">${escapeHtml(primary.label)}</a>` : '<a href="#pricing" class="button primary large">Get Started Free</a>'}
+            ${secondary ? `<a href="${escapeHtml(secondary.url)}" class="button secondary large">${escapeHtml(secondary.label)}</a>` : '<a href="#compiler_story" class="button secondary large">Explore Architecture</a>'}
+          </div>
+          <div class="hero-trust-strip">
+            <div class="trust-stat">
+              <strong class="trust-stat-val">100%</strong>
+              <span class="trust-stat-lbl">Invariant Assurance</span>
+            </div>
+            <div class="trust-stat-divider"></div>
+            <div class="trust-stat">
+              <strong class="trust-stat-val">Two-Key</strong>
+              <span class="trust-stat-lbl">Security Engine</span>
+            </div>
+            <div class="trust-stat-divider"></div>
+            <div class="trust-stat">
+              <strong class="trust-stat-val">0 Lines</strong>
+              <span class="trust-stat-lbl">Handwritten UI Glue</span>
+            </div>
+          </div>
+        </div>
+        <div class="landing-hero-visual">
+          <div class="hero-stage-card">
+            <div class="hero-terminal-header">
+              <div class="term-dots"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span></div>
+              <span class="term-title">air.compiler // live transformation</span>
+              <span class="term-status"><span class="pulse-dot"></span> active</span>
+            </div>
+            <div class="hero-transformation-workbench">
+              <div class="transform-step step-intent">
+                <div class="step-meta"><span class="step-badge">1</span> <span class="step-title">Natural Intent</span></div>
+                <div class="step-intent-quote">&ldquo;Build a multi-tier approval workflow with distinct actor checks.&rdquo;</div>
+              </div>
+              <div class="transform-flow-arrow"><span class="flow-line"></span><span class="flow-arrow-icon">&darr;</span></div>
+              <div class="transform-step step-source">
+                <div class="step-meta"><span class="step-badge">2</span> <span class="step-title">Compact AIR Source</span></div>
+                <div class="step-code-snippet">
+                  <code><span class="tok-kw">process</span> items <span class="tok-prop">state</span>=<span class="tok-val">status</span><br><span class="tok-kw">transition</span> from=<span class="tok-val">draft</span> to=<span class="tok-val">approved</span> <span class="tok-kw">by</span>=<span class="tok-val">manager</span> <span class="tok-prop">distinct</span>=<span class="tok-val">true</span></code>
+                </div>
+              </div>
+              <div class="transform-flow-arrow"><span class="flow-line"></span><span class="flow-arrow-icon">&darr;</span></div>
+              <div class="transform-step step-graph">
+                <div class="step-meta"><span class="step-badge">3</span> <span class="step-title">Semantic Invariant Graph</span></div>
+                <div class="step-graph-preview">
+                  <span class="graph-node valid">draft</span>
+                  <span class="graph-link">&xrarr;</span>
+                  <span class="graph-node active">manager_approval</span>
+                  <span class="graph-link">&xrarr;</span>
+                  <span class="graph-node valid">approved</span>
+                </div>
+              </div>
+              <div class="transform-flow-arrow"><span class="flow-line"></span><span class="flow-arrow-icon">&darr;</span></div>
+              <div class="transform-step step-delivery">
+                <div class="step-meta"><span class="step-badge">4</span> <span class="step-title">Multi-Platform Delivery (0 Handwritten CSS)</span></div>
+                <div class="delivery-targets">
+                  <div class="target-node"><span class="target-dot"></span> Web DOM</div>
+                  <div class="target-node"><span class="target-dot"></span> iOS SwiftUI</div>
+                  <div class="target-node"><span class="target-dot"></span> Android Compose</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>`;
+  }
+
+  function renderCompilerStorySection(section) {
+    const stages = section.pipelineStages ?? [];
+    const activeStep = Math.min(Math.max(1, state.compilerStep), stages.length);
+    const activeStage = stages[activeStep - 1] ?? stages[0];
+
+    return `<section class="landing-section compiler-story-section" id="compiler_story">
+      <div class="landing-section-heading">
+        <p class="eyebrow">Interactive Compiler Architecture</p>
+        <h2>${escapeHtml(section.title ?? "Autonomous Intent Compilation")}</h2>
+        <p>${escapeHtml(section.subtitle ?? "How natural intent transforms into deterministic, reactive multi-platform systems without UI boilerplate.")}</p>
+      </div>
+      <div class="compiler-showcase">
+        <div class="compiler-pipeline-stepper" role="tablist" aria-label="Compilation Pipeline Stages">
+          ${stages.map((stage) => `
+            <button class="stepper-tab ${stage.step === activeStep ? "active" : ""}" data-compiler-step="${stage.step}" role="tab" aria-selected="${stage.step === activeStep ? "true" : "false"}">
+              <span class="step-num">${stage.step}</span>
+              <span class="step-label">${escapeHtml(stage.label)}</span>
+            </button>
+          `).join("")}
+        </div>
+        <div class="compiler-stage-display motion-spotlight">
+          <div class="stage-header">
+            <div class="stage-badge">
+              <span class="step-pill">Stage ${activeStage?.step ?? 1} of ${stages.length}</span>
+              <strong>${escapeHtml(activeStage?.label ?? "")}</strong>
+            </div>
+            <span class="stage-annotation">${escapeHtml(activeStage?.annotation ?? "")}</span>
+          </div>
+          <div class="stage-code-panel">
+            <pre class="stage-code-block"><code>${highlightCompilerSnippet(activeStage?.code ?? "")}</code></pre>
+          </div>
+          <div class="stage-nav-controls">
+            <button type="button" class="button secondary small" data-compiler-step="${Math.max(1, activeStep - 1)}" ${activeStep <= 1 ? "disabled" : ""}>${icon("back", 14)} Previous Stage</button>
+            <div class="stage-flow-dots">
+              ${stages.map((s) => `<span class="flow-dot ${s.step === activeStep ? "active" : s.step < activeStep ? "completed" : ""}"></span>`).join("")}
+            </div>
+            <button type="button" class="button primary small" data-compiler-step="${Math.min(stages.length, activeStep + 1)}" ${activeStep >= stages.length ? "disabled" : ""}>Next Stage ${icon("chevron", 14)}</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  function renderFeatureSection(section) {
+    const raw = section.rawSection ?? section;
+    const motionAttr = section.motion ? `data-motion="${escapeHtml(section.motion.type)}"` : "";
+    const featureLayout = section.featureLayout;
+
+    if (section.composition === COMPOSITIONS.FLAT_FEATURE_LIST) {
+      return `<section class="landing-section minimal-feature-section" id="features" ${motionAttr}>
+        <div class="landing-section-heading">
+          <p class="eyebrow">Capabilities</p>
+          <h2>${escapeHtml(raw.title ?? "Capabilities")}</h2>
+          <p>${escapeHtml(raw.subtitle ?? "")}</p>
+        </div>
+        <div class="flat-feature-list">
+          ${(raw.items ?? []).map((item, idx) => `
+            <div class="flat-feature-row">
+              <div class="flat-feature-index">0${idx + 1}</div>
+              <div class="flat-feature-body">
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.description)}</p>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </section>`;
+    }
+
+    if (section.composition === COMPOSITIONS.EDITORIAL_NARRATIVE) {
+      return `<section class="landing-section editorial-feature-section" id="features" ${motionAttr}>
+        <div class="landing-section-heading">
+          <p class="eyebrow">Architecture & Guarantees</p>
+          <h2>${escapeHtml(raw.title ?? "System Philosophy")}</h2>
+          <p>${escapeHtml(raw.subtitle ?? "")}</p>
+        </div>
+        <div class="editorial-columns">
+          ${(raw.items ?? []).map((item) => `
+            <article class="editorial-story-item">
+              <h3>${escapeHtml(item.title)}</h3>
+              <p>${escapeHtml(item.description)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>`;
+    }
+
+    // Default / Asymmetric Bento Grid
+    if (featureLayout && featureLayout.dominantAnchor) {
+      return `<section class="landing-section feature-section" id="features" ${motionAttr}>
+        <div class="landing-section-heading">
+          <p class="eyebrow">Capabilities & Invariants</p>
+          <h2>${escapeHtml(raw.title ?? "Built for Autonomous Engineering")}</h2>
+          <p>${escapeHtml(raw.subtitle ?? "Everything you need to build robust, verifiable software systems.")}</p>
+        </div>
+        <div class="feature-grid bento-grid">
+          <article class="bento-card dominant-card motion-card">
+            <div class="bento-card-badge"><span class="badge positive"><span></span>Core Capability</span></div>
+            <div class="bento-card-icon large">${icon(featureLayout.dominantAnchor.icon ?? "spark", 30)}</div>
+            <h3>${escapeHtml(featureLayout.dominantAnchor.title)}</h3>
+            <p class="dominant-desc">${escapeHtml(featureLayout.dominantAnchor.description)}</p>
+            <div class="dominant-visual-preview">
+              <div class="preview-metric"><span>Invariant Assurance</span><strong>100% Deterministic</strong></div>
+              <div class="preview-metric"><span>Boilerplate Generated</span><strong>0 Lines</strong></div>
+            </div>
+          </article>
+          ${(featureLayout.supportingStories ?? []).map((item, idx) => `
+            <article class="bento-card supporting-card motion-card">
+              <div class="bento-card-icon">${icon(item.icon ?? (idx === 0 ? "check" : "collection"), 22)}</div>
+              <h4>${escapeHtml(item.title)}</h4>
+              <p>${escapeHtml(item.description)}</p>
+            </article>
+          `).join("")}
+          ${featureLayout.proofHighlight ? `
+            <article class="bento-card proof-card motion-card">
+              <div class="bento-card-icon">${icon(featureLayout.proofHighlight.icon ?? "lock", 22)}</div>
+              <h4>${escapeHtml(featureLayout.proofHighlight.title)}</h4>
+              <p>${escapeHtml(featureLayout.proofHighlight.description)}</p>
+              <div class="proof-card-footer"><span class="chip-live">Live Automated Verification</span></div>
+            </article>
+          ` : ""}
+        </div>
+      </section>`;
+    }
+
+    const items = (raw.items ?? []).map((item) => `
+      <article class="feature-card motion-card" tabindex="0">
+        <div class="feature-card-icon">${icon(item.icon ?? "spark", 24)}</div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <p>${escapeHtml(item.description)}</p>
+      </article>
+    `).join("");
+
+    return `<section class="landing-section feature-section" id="features" ${motionAttr}>
+      <div class="landing-section-heading">
+        <p class="eyebrow">Capabilities</p>
+        <h2>${escapeHtml(raw.title ?? "Capabilities")}</h2>
+        <p>${escapeHtml(raw.subtitle ?? "")}</p>
+      </div>
+      <div class="feature-grid">${items}</div>
+    </section>`;
+  }
+
+  function renderSocialProofSection(section) {
+    const raw = section.rawSection ?? section;
+    const stats = (raw.stats ?? [
+      { label: "Token Compression", value: "94%" },
+      { label: "Execution Latency", value: "< 2ms" },
+      { label: "Security Vulnerabilities", value: "0" }
+    ]).map((stat) => `
+      <div class="stat-callout-item">
+        <strong class="stat-value">${escapeHtml(stat.value)}</strong>
+        <span class="stat-label">${escapeHtml(stat.label)}</span>
+      </div>
+    `).join("");
+
+    const testimonials = (raw.testimonials ?? []).map((item) => `
+      <blockquote class="editorial-quote-card">
+        <span class="quote-symbol" aria-hidden="true">“</span>
+        <p class="quote-text">${escapeHtml(item.quote)}</p>
+        <footer class="quote-footer">
+          <strong class="quote-author">${escapeHtml(item.author)}</strong>
+          <span class="quote-role">${escapeHtml(item.role)}</span>
+        </footer>
+      </blockquote>
+    `).join("");
+
+    return `<section class="landing-section social-proof-section" id="proof">
+      <div class="landing-section-heading">
+        <p class="eyebrow">Empirical Verification</p>
+        <h2>${escapeHtml(raw.title ?? "Proven Quantitative Reductions")}</h2>
+        <p>${escapeHtml(raw.subtitle ?? "Measured across complex enterprise applications.")}</p>
+      </div>
+      ${stats ? `<div class="stats-callout-grid">${stats}</div>` : ""}
+      ${testimonials ? `<div class="editorial-quotes-wrap">${testimonials}</div>` : ""}
+    </section>`;
+  }
+
+  function renderPricingSection(section) {
+    const raw = section.rawSection ?? section;
+    const tiers = (raw.tiers ?? []).map((tier) => `
+      <article class="pricing-card ${tier.popular ? "popular" : ""}">
+        ${tier.popular ? '<div class="pricing-badge">Most Popular</div>' : ""}
+        <div class="pricing-card-header">
+          <h3>${escapeHtml(tier.name)}</h3>
+          <p>${escapeHtml(tier.description)}</p>
+        </div>
+        <div class="pricing-card-price">
+          <strong>${escapeHtml(tier.price)}</strong>
+          <span>/${escapeHtml(tier.period)}</span>
+        </div>
+        <ul class="pricing-features">
+          ${(tier.features ?? []).map((f) => `<li>${icon("check", 16)} <span>${escapeHtml(f)}</span></li>`).join("")}
+        </ul>
+        <div class="pricing-card-cta">
+          <button class="button ${tier.popular ? "primary" : "secondary"}" style="width: 100%;">${escapeHtml(tier.cta)}</button>
+        </div>
+      </article>
+    `).join("");
+
+    return `<section class="landing-section pricing-section" id="pricing">
+      <div class="landing-section-heading">
+        <p class="eyebrow">Pricing Plans</p>
+        <h2>${escapeHtml(raw.title ?? "Predictable, Transparent Pricing")}</h2>
+        <p>${escapeHtml(raw.subtitle ?? "Scale seamlessly from local prototype to distributed enterprise cluster.")}</p>
+      </div>
+      <div class="pricing-grid">${tiers}</div>
+    </section>`;
+  }
+
+  function renderFaqSection(section) {
+    const raw = section.rawSection ?? section;
+    const items = (raw.items ?? []).map((item, idx) => `
+      <details class="faq-item" ${idx === 0 ? "open" : ""}>
+        <summary class="faq-question">
+          <span>${escapeHtml(item.question)}</span>
+          ${icon("chevron", 18)}
+        </summary>
+        <div class="faq-answer">
+          <p>${escapeHtml(item.answer)}</p>
+        </div>
+      </details>
+    `).join("");
+
+    return `<section class="landing-section faq-section" id="faq">
+      <div class="landing-section-heading">
+        <p class="eyebrow">Knowledge Base</p>
+        <h2>${escapeHtml(raw.title ?? "Frequently Asked Questions")}</h2>
+        <p>${escapeHtml(raw.subtitle ?? "Everything you need to know about AIR architecture.")}</p>
+      </div>
+      <div class="faq-accordion">${items}</div>
+    </section>`;
+  }
+
+  function renderCtaSection(section) {
+    const raw = section.rawSection ?? section;
+    return `<section class="landing-section cta-section">
+      <div class="cta-banner">
+        <div class="cta-banner-content">
+          <h2>${escapeHtml(raw.headline ?? "Start Building Software from Intent Today")}</h2>
+          <p>${escapeHtml(raw.tagline ?? "Experience the speed and safety of autonomous software compilation.")}</p>
+          <div class="cta-banner-actions">
+            <a href="${escapeHtml(raw.action?.url ?? "#pricing")}" class="button primary large">${escapeHtml(raw.action?.label ?? "Deploy Your First App")}</a>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  function renderFooterSection(section) {
+    const raw = section.rawSection ?? section;
+    const links = (raw.links ?? [
+      { label: "Documentation", url: "#" },
+      { label: "GitHub", url: "https://github.com/joaquimpsoares/AIR" },
+      { label: "Privacy Policy", url: "#" },
+      { label: "Security Architecture", url: "#" }
+    ]).map((l) => `
+      <a href="${escapeHtml(l.url)}">${escapeHtml(l.label)}</a>
+    `).join("");
+
+    return `<footer class="landing-footer">
+      <div class="landing-footer-inner">
+        <div class="landing-footer-brand">
+          <div class="brand"><span class="brand-mark">${icon("spark", 18)}</span><strong>${escapeHtml(raw.brand ?? presentationIr.app.title)}</strong></div>
+          <p class="copyright">${escapeHtml(raw.copyright ?? `© ${new Date().getFullYear()} AIR Platform. All rights reserved.`)}</p>
+        </div>
+        <nav class="landing-footer-links" aria-label="Footer navigation">${links}</nav>
+      </div>
+    </footer>`;
+  }
+
+  function renderMarketingLanding(screen) {
+    const visualScreen = visualDesignIr.screens.find((s) => s.id === screen.id) ?? visualDesignIr.screens[0];
+    const sectionsHtml = (visualScreen.sections ?? []).map((section) => {
+      switch (section.semanticType) {
+        case "hero":
+          return renderHeroSection(section);
+        case "compiler_story":
+          return renderCompilerStorySection(section);
+        case "feature_grid":
+        case "features":
+          return renderFeatureSection(section);
+        case "social_proof":
+        case "testimonials":
+          return renderSocialProofSection(section);
+        case "pricing_grid":
+        case "pricing":
+          return renderPricingSection(section);
+        case "faq_accordion":
+        case "faq":
+          return renderFaqSection(section);
+        case "call_to_action":
+        case "cta":
+          return renderCtaSection(section);
+        case "footer":
+          return renderFooterSection(section);
+        default:
+          return "";
+      }
+    }).join("");
+
+    return `<div class="marketing-landing" data-marketing-landing>${sectionsHtml}</div>`;
+  }
+
   function renderPage() {
     if (state.detail) return renderDetail();
     const screen = currentScreen();
     if (!screen) return `<div class="panel"><h2>Page not found</h2></div>`;
+    if (screen.type === "marketing_landing") return renderMarketingLanding(screen);
     if (screen.type === "auth_login") return renderAuthLogin(screen);
     if (screen.type === "auth_register") return renderAuthRegister(screen);
     if (screen.type === "auth_verify") return renderAuthVerify(screen);
@@ -757,13 +1176,52 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     applyTheme();
     root.removeAttribute("aria-busy");
     const isAuthScreen = ["auth_login", "auth_register", "auth_verify", "auth_forgot_password", "auth_reset_password"].includes(currentScreen()?.type);
+    
     if (isAuthScreen) {
       root.innerHTML = `<main class="content auth-content" tabindex="-1">${renderPage()}</main><div id="air-toast" class="toast" role="status" aria-live="polite"></div>`;
+    } else if (visualDesignIr.shell.type === SHELL_TYPES.PUBLIC || currentScreen()?.type === "marketing_landing") {
+      // Public / Marketing Shell
+      root.innerHTML = `<div class="public-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}">
+        <header class="public-nav-header">
+          <div class="public-nav-inner">
+            <a href="#hero" class="brand public-brand" aria-label="AIR Platform home">
+              <span class="brand-monogram">AIR</span>
+              <div class="brand-info">
+                <strong class="brand-title">${escapeHtml(presentationIr.app.title)}</strong>
+                <span class="brand-tagline">Autonomous Intent Runtime</span>
+              </div>
+            </a>
+            <nav class="public-nav-links" aria-label="Public navigation">
+              ${visualDesignIr.shell.publicNavItems.map((item) => `<a href="${escapeHtml(item.href)}" class="public-nav-link">${escapeHtml(item.label)}</a>`).join("")}
+            </nav>
+            <div class="public-nav-actions">
+              <button class="icon-button" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+                ${icon(state.theme === "dark" ? "sun" : "moon", 18)}
+              </button>
+              <a href="${escapeHtml(visualDesignIr.shell.primaryCta.href)}" class="button primary small desktop-cta">${escapeHtml(visualDesignIr.shell.primaryCta.label)}</a>
+              <button class="icon-button mobile-nav-toggle" data-mobile-nav-toggle aria-label="Toggle mobile menu" aria-expanded="${state.mobileMenuOpen}">
+                ${icon(state.mobileMenuOpen ? "close" : "collection", 20)}
+              </button>
+            </div>
+          </div>
+          ${state.mobileMenuOpen ? `
+            <div class="public-mobile-drawer" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+              <nav class="public-mobile-nav-links">
+                ${visualDesignIr.shell.publicNavItems.map((item) => `<a href="${escapeHtml(item.href)}" class="public-mobile-nav-link" data-close-mobile-nav>${escapeHtml(item.label)}</a>`).join("")}
+                <a href="${escapeHtml(visualDesignIr.shell.primaryCta.href)}" class="button primary public-mobile-cta" data-close-mobile-nav>${escapeHtml(visualDesignIr.shell.primaryCta.label)}</a>
+              </nav>
+            </div>
+          ` : ""}
+        </header>
+        <main class="public-content" tabindex="-1">${renderPage()}</main>
+        <div id="air-toast" class="toast" role="status" aria-live="polite"></div>
+      </div>`;
     } else {
+      // Authenticated Application Shell
       const principal = runtime?.principal;
       const isAuthenticated = Boolean(principal && (principal.id || (principal.roles && principal.roles.length > 0)));
       const currentUser = authAdapter.users?.find((u) => u.id === principal?.id);
-      root.innerHTML = `<div class="app-shell">
+      root.innerHTML = `<div class="app-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}">
         <aside class="sidebar">
           <div class="brand"><span class="brand-mark">${icon("spark", 20)}</span><div><strong>${escapeHtml(presentationIr.app.title)}</strong><small>AIR native</small></div></div>
           ${isAuthenticated ? `
@@ -1201,13 +1659,63 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       root.querySelector("[data-clear-filters]")?.addEventListener("click", () => { query.search = ""; Object.keys(query.filters).forEach((key) => { query.filters[key] = ""; }); render(); });
       root.querySelectorAll("[data-page]").forEach((btn) => btn.addEventListener("click", () => { query.page = Number(btn.dataset.page); render(); }));
     }
+
+    // Mobile navigation toggle & drawer
+    root.querySelector("[data-mobile-nav-toggle]")?.addEventListener("click", () => {
+      state.mobileMenuOpen = !state.mobileMenuOpen;
+      render();
+    });
+
+    root.querySelectorAll("[data-close-mobile-nav]").forEach((link) => {
+      link.addEventListener("click", () => {
+        state.mobileMenuOpen = false;
+        render();
+      });
+    });
+
+    // Interactive compiler showcase stage switcher
+    root.querySelectorAll("[data-compiler-step]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        const step = Number(btn.dataset.compilerStep);
+        if (Number.isFinite(step) && step >= 1) {
+          state.compilerStep = step;
+          render();
+        }
+      });
+    });
+
+    // Motion spotlight pointer follow
+    root.querySelectorAll(".motion-spotlight").forEach((spotlight) => {
+      spotlight.addEventListener("pointermove", (event) => {
+        if (typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          return;
+        }
+        const rect = spotlight.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        spotlight.style.setProperty("--pointer-x", `${x}px`);
+        spotlight.style.setProperty("--pointer-y", `${y}px`);
+      });
+    });
+  }
+
+  // Reactive subscription: Automatically re-render on semantic runtime mutations
+  let unsubscribe = null;
+  if (runtime && typeof runtime.subscribe === "function") {
+    unsubscribe = runtime.subscribe((_event) => {
+      render();
+    });
   }
 
   render();
   return {
     navigate,
     render,
-    authAdapter
+    authAdapter,
+    destroy() {
+      if (unsubscribe) unsubscribe();
+    }
   };
 }
 
@@ -1223,10 +1731,9 @@ export function mountAirApp(root, source, options = {}) {
     const seedData = parseSeedData(options.seedSource ?? {}, model);
     runtime = new AppRuntime(model, { storage: options.storage, seedData, principal: options.principal });
     presentationIr = compilePresentation(model, { principal: options.principal, runtime });
+    return renderPresentation(root, presentationIr, runtime, { ...options, model });
   } catch (error) {
     renderFatalError(root, error);
     return null;
   }
-
-  return renderPresentation(root, presentationIr, runtime, { ...options, model });
 }

@@ -142,8 +142,177 @@ export const EXPERIENCE_REGISTRY = Object.freeze({
     provides: ["user_list", "status_toggle", "role_assignment", "activity_indicators"],
     lifecycle: "authorized_content",
     authority: "role:admin"
+  },
+  "marketing.landing": {
+    id: "marketing.landing",
+    version: 1,
+    purpose: "Composite public product landing page experience composing hero, features, proof, pricing, FAQ, and CTA.",
+    composes: [
+      "marketing.hero",
+      "marketing.features",
+      "marketing.social_proof",
+      "marketing.pricing",
+      "marketing.faq",
+      "marketing.cta",
+      "marketing.footer"
+    ],
+    lifecycle: "public"
+  },
+  "marketing.hero": {
+    id: "marketing.hero",
+    version: 1,
+    purpose: "High-impact conversion header with headlines, visual asset, actions, and motion intent.",
+    provides: ["headline", "tagline", "primary_action", "secondary_action", "media", "motion_intent"],
+    lifecycle: "public"
+  },
+  "marketing.features": {
+    id: "marketing.features",
+    version: 1,
+    purpose: "Feature showcase grid highlighting product capabilities and value propositions.",
+    provides: ["feature_grid", "iconography", "feature_descriptions"],
+    lifecycle: "public"
+  },
+  "marketing.social_proof": {
+    id: "marketing.social_proof",
+    version: 1,
+    purpose: "Customer testimonials, quotes, and social proof metrics.",
+    provides: ["quote_carousel", "testimonials", "stats_grid"],
+    lifecycle: "public"
+  },
+  "marketing.pricing": {
+    id: "marketing.pricing",
+    version: 1,
+    purpose: "Tiered pricing comparison table with feature breakdown and subscription CTAs.",
+    provides: ["pricing_tiers", "tier_features", "checkout_actions", "billing_interval_toggle"],
+    lifecycle: "public"
+  },
+  "marketing.faq": {
+    id: "marketing.faq",
+    version: 1,
+    purpose: "Interactive expandable frequently asked questions accordion.",
+    provides: ["faq_accordion", "search_questions"],
+    lifecycle: "public"
+  },
+  "marketing.cta": {
+    id: "marketing.cta",
+    version: 1,
+    purpose: "Closing conversion call-to-action banner.",
+    provides: ["headline", "supporting_copy", "action_button"],
+    lifecycle: "public"
+  },
+  "marketing.footer": {
+    id: "marketing.footer",
+    version: 1,
+    purpose: "Standard public footer with navigational links, social badges, and copyright statement.",
+    provides: ["footer_links", "brand_statement", "copyright"],
+    lifecycle: "public"
   }
 });
+
+/**
+ * Computes an incremental Presentation Patch from a semantic runtime event.
+ * 
+ * @param {object} previousIr Previous Presentation IR
+ * @param {object} event Semantic mutation/lifecycle event from AppRuntime
+ * @param {object} runtime Authoritative AppRuntime instance
+ * @returns {object} Platform-neutral Presentation Patch
+ */
+export function computePresentationPatch(previousIr, event, runtime) {
+  const patch = {
+    schema: "air.presentation-patch",
+    version: 1,
+    timestamp: event?.timestamp ?? new Date().toISOString(),
+    type: event?.type ?? "semantic_update",
+    operations: []
+  };
+
+  if (!event || !runtime) return patch;
+
+  switch (event.type) {
+    case "resource_created": {
+      patch.operations.push({
+        op: "add_collection_item",
+        resource: event.resource,
+        recordId: event.record?.id,
+        record: event.record
+      });
+      patch.operations.push({
+        op: "invalidate_metrics",
+        source: event.resource
+      });
+      break;
+    }
+    case "resource_updated": {
+      patch.operations.push({
+        op: "update_collection_item",
+        resource: event.resource,
+        recordId: event.recordId,
+        record: event.record
+      });
+      patch.operations.push({
+        op: "update_detail",
+        resource: event.resource,
+        recordId: event.recordId,
+        record: event.record
+      });
+      patch.operations.push({
+        op: "invalidate_metrics",
+        source: event.resource
+      });
+      break;
+    }
+    case "resource_deleted":
+    case "resource_archived": {
+      patch.operations.push({
+        op: "remove_collection_item",
+        resource: event.resource,
+        recordId: event.recordId
+      });
+      patch.operations.push({
+        op: "invalidate_metrics",
+        source: event.resource
+      });
+      break;
+    }
+    case "workflow_transitioned": {
+      patch.operations.push({
+        op: "update_collection_item",
+        resource: event.resource,
+        recordId: event.recordId
+      });
+      patch.operations.push({
+        op: "update_workflow_state",
+        resource: event.resource,
+        recordId: event.recordId,
+        fromState: event.fromState,
+        toState: event.toState,
+        action: event.action
+      });
+      patch.operations.push({
+        op: "refresh_workflow_inbox",
+        resource: event.resource
+      });
+      patch.operations.push({
+        op: "invalidate_metrics",
+        source: event.resource
+      });
+      break;
+    }
+    case "reset": {
+      patch.operations.push({
+        op: "refresh_all"
+      });
+      break;
+    }
+    default: {
+      patch.operations.push({
+        op: "refresh_all"
+      });
+    }
+  }
+
+  return patch;
+}
 
 function slug(value) {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -432,6 +601,221 @@ export function compilePresentation(model, options = {}) {
     }
   }
 
+  // 1d. Marketing / Landing Experiences
+  const marketingLandingExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.landing" || exp.kind === "marketing.landing");
+  const marketingHeroExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.hero" || exp.kind === "marketing.hero");
+  const marketingFeaturesExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.features" || exp.kind === "marketing.features");
+  const marketingSocialProofExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.social_proof" || exp.kind === "marketing.social_proof" || exp.id === "marketing.testimonials");
+  const marketingPricingExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.pricing" || exp.kind === "marketing.pricing");
+  const marketingFaqExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.faq" || exp.kind === "marketing.faq");
+  const marketingCtaExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.cta" || exp.kind === "marketing.cta");
+  const marketingFooterExp = (model.experiences ?? []).find((exp) => exp.id === "marketing.footer" || exp.kind === "marketing.footer");
+
+  const hasMarketing = Boolean(
+    marketingLandingExp || marketingHeroExp || marketingFeaturesExp ||
+    marketingSocialProofExp || marketingPricingExp || marketingFaqExp ||
+    marketingCtaExp || marketingFooterExp
+  );
+
+  if (hasMarketing) {
+    if (marketingLandingExp) {
+      experiencesUsed.add("marketing.landing");
+      for (const comp of EXPERIENCE_REGISTRY["marketing.landing"].composes) {
+        experiencesUsed.add(comp);
+      }
+    }
+    if (marketingHeroExp) experiencesUsed.add("marketing.hero");
+    if (marketingFeaturesExp) experiencesUsed.add("marketing.features");
+    if (marketingSocialProofExp) experiencesUsed.add("marketing.social_proof");
+    if (marketingPricingExp) experiencesUsed.add("marketing.pricing");
+    if (marketingFaqExp) experiencesUsed.add("marketing.faq");
+    if (marketingCtaExp) experiencesUsed.add("marketing.cta");
+    if (marketingFooterExp) experiencesUsed.add("marketing.footer");
+
+    const landingSections = [];
+
+    // Hero Section
+    const heroProps = marketingHeroExp?.props ?? marketingLandingExp?.props ?? {};
+    landingSections.push({
+      id: "hero_section",
+      type: "hero",
+      experience: "marketing.hero",
+      headline: heroProps.headline ?? heroProps.title ?? model.app.title,
+      tagline: heroProps.tagline ?? heroProps.subtitle ?? model.app.subtitle,
+      primaryAction: {
+        label: heroProps.primary_action ?? "Get Started",
+        url: heroProps.primary_action_url ?? "#pricing",
+        intent: "primary_cta"
+      },
+      secondaryAction: heroProps.secondary_action ? {
+        label: heroProps.secondary_action,
+        url: heroProps.secondary_action_url ?? "#features",
+        intent: "secondary_cta"
+      } : null,
+      media: heroProps.media ? {
+        src: heroProps.media,
+        alt: heroProps.media_alt ?? "Product preview",
+        type: "image"
+      } : null,
+      motion: {
+        type: heroProps.motion ?? "pointer_follow",
+        intensity: "subtle",
+        reducedMotionFallback: "static"
+      }
+    });
+
+    // Features Section
+    const featuresProps = marketingFeaturesExp?.props ?? marketingLandingExp?.props ?? {};
+    let featureItems = [
+      { id: "feat_1", title: "Intent-First Architecture", description: "Describe application behavior and invariants without boilerplate HTML, CSS, or routing plumbing.", icon: "spark" },
+      { id: "feat_2", title: "Deterministic State & Workflows", description: "Full multi-step state machines with actor authorization, separation of duty, and immutable audit logs.", icon: "check" },
+      { id: "feat_3", title: "Universal Data & Adapters", description: "Seamless persistence across In-Memory, SQLite, and PostgreSQL with zero business code rewrites.", icon: "collection" },
+      { id: "feat_4", title: "Autonomous Incident Diagnostics", description: "Built-in read-only incident correlation, sanitized evidence trees, and automated self-healing.", icon: "lock" }
+    ];
+    if (featuresProps.features && typeof featuresProps.features === "string") {
+      try {
+        const parsed = JSON.parse(featuresProps.features);
+        if (Array.isArray(parsed)) featureItems = parsed;
+      } catch (_) {}
+    }
+    landingSections.push({
+      id: "features_section",
+      type: "feature_grid",
+      experience: "marketing.features",
+      title: featuresProps.title ?? "Built for Autonomous Engineering",
+      subtitle: featuresProps.subtitle ?? "Everything you need to build robust, verifiable software systems.",
+      items: featureItems,
+      motion: {
+        type: featuresProps.motion ?? "reveal_on_scroll",
+        reducedMotionFallback: "static"
+      }
+    });
+
+    // Social Proof / Testimonials Section
+    const proofProps = marketingSocialProofExp?.props ?? marketingLandingExp?.props ?? {};
+    let testimonialItems = [
+      { id: "t_1", author: "Dr. Elena Rostova", role: "VP of Engineering, Sovereign Cloud", quote: "AIR reduced our AI token footprint by 94% while giving us formal deterministic guarantees we never had with React." },
+      { id: "t_2", author: "Marcus Vance", role: "Chief Security Architect, Fintech Dynamics", quote: "The separation of semantic intent from platform rendering completely eliminated UI vulnerability injection vectors." }
+    ];
+    if (proofProps.testimonials && typeof proofProps.testimonials === "string") {
+      try {
+        const parsed = JSON.parse(proofProps.testimonials);
+        if (Array.isArray(parsed)) testimonialItems = parsed;
+      } catch (_) {}
+    }
+    landingSections.push({
+      id: "social_proof_section",
+      type: "social_proof",
+      experience: "marketing.social_proof",
+      title: proofProps.title ?? "Trusted by Mission-Critical Teams",
+      subtitle: proofProps.subtitle ?? "See how engineering leaders build software at scale.",
+      testimonials: testimonialItems,
+      stats: [
+        { label: "Token Compression", value: "94%" },
+        { label: "Execution Latency", value: "< 2ms" },
+        { label: "Security Vulnerabilities", value: "0" }
+      ]
+    });
+
+    // Pricing Section
+    const pricingProps = marketingPricingExp?.props ?? marketingLandingExp?.props ?? {};
+    let pricingTiers = [
+      { id: "tier_free", name: "Developer", price: "$0", period: "forever", description: "Local development and deterministic testing.", features: ["Single workspace", "Local SQLite adapter", "Presentation Compiler", "CLI tooling"], cta: "Get Started Free", popular: false },
+      { id: "tier_pro", name: "Production", price: "$49", period: "per month", description: "Mission-critical applications with enterprise resilience.", features: ["Unlimited workspaces", "PostgreSQL & REST connectors", "Incident Reaction Engine", "Audit & Diagnostics"], cta: "Start Free Trial", popular: true },
+      { id: "tier_ent", name: "Enterprise", price: "Custom", period: "billed annually", description: "Dedicated isolation, custom adapters, and compliance SLA.", features: ["Air-gapped deployment", "Custom MCP connectors", "SLA & 24/7 support", "SOC2 verification kit"], cta: "Contact Sales", popular: false }
+    ];
+    if (pricingProps.tiers && typeof pricingProps.tiers === "string") {
+      try {
+        const parsed = JSON.parse(pricingProps.tiers);
+        if (Array.isArray(parsed)) pricingTiers = parsed;
+      } catch (_) {}
+    }
+    landingSections.push({
+      id: "pricing_section",
+      type: "pricing_grid",
+      experience: "marketing.pricing",
+      title: pricingProps.title ?? "Predictable, Transparent Pricing",
+      subtitle: pricingProps.subtitle ?? "Scale seamlessly from local prototype to distributed enterprise cluster.",
+      tiers: pricingTiers
+    });
+
+    // FAQ Section
+    const faqProps = marketingFaqExp?.props ?? marketingLandingExp?.props ?? {};
+    let faqItems = [
+      { id: "faq_1", question: "How does AIR eliminate UI boilerplate?", answer: "AIR compiles platform-neutral presentation semantics into responsive DOM or native views directly. AI agents never need to generate HTML, CSS, React hooks, or responsive media queries." },
+      { id: "faq_2", question: "Can AIR render on native mobile platforms?", answer: "Yes. Presentation IR is strictly platform-neutral. The same Presentation IR that powers this web experience maps directly to SwiftUI and Jetpack Compose without touching domain logic." },
+      { id: "faq_3", question: "Does AIR require a page reload for state updates?", answer: "No. The AIR reactive presentation runtime dispatches granular semantic diffs and patches, updating affected metrics, tables, and workflow states instantaneously." },
+      { id: "faq_4", question: "How does AIR ensure motion accessibility?", answer: "All motion primitives automatically degrade to static states when the user enables prefers-reduced-motion in their operating system." }
+    ];
+    if (faqProps.items && typeof faqProps.items === "string") {
+      try {
+        const parsed = JSON.parse(faqProps.items);
+        if (Array.isArray(parsed)) faqItems = parsed;
+      } catch (_) {}
+    }
+    landingSections.push({
+      id: "faq_section",
+      type: "faq_accordion",
+      experience: "marketing.faq",
+      title: faqProps.title ?? "Frequently Asked Questions",
+      subtitle: faqProps.subtitle ?? "Everything you need to know about AIR architecture.",
+      items: faqItems
+    });
+
+    // Closing CTA Section
+    const ctaProps = marketingCtaExp?.props ?? marketingLandingExp?.props ?? {};
+    landingSections.push({
+      id: "cta_section",
+      type: "call_to_action",
+      experience: "marketing.cta",
+      headline: ctaProps.headline ?? "Start Building Software from Intent Today",
+      tagline: ctaProps.tagline ?? "Experience the speed and safety of autonomous software compilation.",
+      action: {
+        label: ctaProps.action_label ?? "Deploy Your First App",
+        url: ctaProps.action_url ?? "#pricing"
+      }
+    });
+
+    // Footer Section
+    const footerProps = marketingFooterExp?.props ?? marketingLandingExp?.props ?? {};
+    landingSections.push({
+      id: "footer_section",
+      type: "footer",
+      experience: "marketing.footer",
+      brand: model.app.title,
+      copyright: footerProps.copyright ?? `© ${new Date().getFullYear()} AIR Platform. All rights reserved.`,
+      links: [
+        { label: "Documentation", url: "#" },
+        { label: "GitHub", url: "https://github.com/joaquimpsoares/AIR" },
+        { label: "Privacy Policy", url: "#" },
+        { label: "Security Architecture", url: "#" }
+      ]
+    });
+
+    screens.push({
+      id: "marketing_landing",
+      type: "marketing_landing",
+      title: model.app.title,
+      subtitle: model.app.subtitle ?? "Product Experience",
+      icon: "spark",
+      experience: "marketing.landing",
+      navigation: {
+        visible: true,
+        order: 0,
+        label: "Product"
+      },
+      sections: landingSections
+    });
+
+    navigationItems.push({
+      id: "marketing_landing",
+      screenId: "marketing_landing",
+      title: model.app.title,
+      icon: "spark",
+      visible: true
+    });
+  }
+
   // 2. Overview / Dashboard Screen if declared
   const hasOverview = Boolean(model.overview || model.pages?.some((p) => p.id === "overview"));
   if (hasOverview) {
@@ -677,12 +1061,15 @@ export function compilePresentation(model, options = {}) {
   }
 
   const hasAuthExperience = screens.some(s => s.type === "auth_login");
+  const hasMarketingLanding = screens.some(s => s.type === "marketing_landing");
   
   const initialScreenId = (hasAuthExperience && !isAuthenticated)
     ? "auth_login"
-    : ((screens.find(s => s.id === model.app.initial && s.type !== "auth_login")?.id)
-      ?? screens.find(s => s.type !== "auth_login")?.id
-      ?? "overview");
+    : (hasMarketingLanding
+      ? "marketing_landing"
+      : ((screens.find(s => s.id === model.app.initial && s.type !== "auth_login")?.id)
+        ?? screens.find(s => s.type !== "auth_login")?.id
+        ?? "overview"));
 
   return {
     schema: "air.presentation-ir",

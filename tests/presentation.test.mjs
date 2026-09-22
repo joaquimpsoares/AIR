@@ -370,5 +370,174 @@ test("Sign out clears active session and returns to login screen", async () => {
   assert.ok(root.innerHTML.includes("auth-login-form") || root.innerHTML.includes("Sign In"), "DOM should return to login screen after logout");
 });
 
+test("Marketing landing Experience compiles to valid Presentation IR and renders marketing DOM", async () => {
+  const source = await readFile("apps/landing-demo.air", "utf8");
+  const model = parseAir(source);
+  const ir = compilePresentation(model);
 
+  assert.ok(ir.experiences.includes("marketing.landing"));
+  const landingScreen = ir.screens.find(s => s.type === "marketing_landing");
+  assert.ok(landingScreen, "Marketing landing screen must exist");
+  assert.equal(landingScreen.experience, "marketing.landing");
+  assert.equal(landingScreen.navigation.visible, true);
 
+  // Sections verification
+  const hero = landingScreen.sections.find(s => s.type === "hero");
+  assert.ok(hero, "Hero section must exist");
+  assert.equal(hero.headline, "Compile Software Directly from Intent");
+  assert.equal(hero.primaryAction.label, "Get Started Free");
+  assert.equal(hero.motion.type, "pointer_follow");
+
+  const features = landingScreen.sections.find(s => s.type === "feature_grid");
+  assert.ok(features, "Features section must exist");
+  assert.equal(features.items.length >= 4, true);
+
+  const proof = landingScreen.sections.find(s => s.type === "social_proof");
+  assert.ok(proof, "Social proof section must exist");
+  assert.equal(proof.testimonials.length >= 2, true);
+  assert.equal(proof.stats.length >= 3, true);
+
+  const pricing = landingScreen.sections.find(s => s.type === "pricing_grid");
+  assert.ok(pricing, "Pricing section must exist");
+  assert.equal(pricing.tiers.length >= 3, true);
+
+  const faq = landingScreen.sections.find(s => s.type === "faq_accordion");
+  assert.ok(faq, "FAQ section must exist");
+  assert.equal(faq.items.length >= 4, true);
+
+  const cta = landingScreen.sections.find(s => s.type === "call_to_action");
+  assert.ok(cta, "CTA section must exist");
+
+  const footer = landingScreen.sections.find(s => s.type === "footer");
+  assert.ok(footer, "Footer section must exist");
+
+  // DOM Rendering verification
+  const root = {
+    innerHTML: "",
+    attributes: {},
+    removeAttribute(attr) { delete this.attributes[attr]; },
+    querySelectorAll() { return []; },
+    querySelector() { return null; }
+  };
+
+  renderPresentation(root, ir, null);
+  assert.ok(root.innerHTML.includes("marketing-landing"), "DOM must render marketing-landing container");
+  assert.ok(root.innerHTML.includes("landing-hero"), "DOM must render hero section");
+  assert.ok(root.innerHTML.includes("Compile Software Directly from Intent"), "DOM must include hero headline");
+  assert.ok(root.innerHTML.includes("feature-grid"), "DOM must render feature grid");
+  assert.ok(root.innerHTML.includes("pricing-grid"), "DOM must render pricing grid");
+  assert.ok(root.innerHTML.includes("faq-accordion"), "DOM must render FAQ accordion");
+  assert.ok(root.innerHTML.includes("cta-banner"), "DOM must render CTA banner");
+  assert.ok(root.innerHTML.includes("landing-footer"), "DOM must render landing footer");
+});
+
+test("computePresentationPatch produces granular platform-neutral patch operations", async () => {
+  const { computePresentationPatch } = await import("../web/runtime/presentation.mjs");
+  const source = await readFile("apps/customer-manager.air", "utf8");
+  const model = parseAir(source);
+  const runtime = new AppRuntime(model, { seedData: {}, principal: { roles: ["admin"] } });
+  const ir = compilePresentation(model, { runtime });
+
+  // 1. Create patch
+  const createdRecord = { id: "c_999", name: "Acme Corp" };
+  const createPatch = computePresentationPatch(ir, {
+    type: "resource_created",
+    resource: "customers",
+    record: createdRecord
+  }, runtime);
+  assert.equal(createPatch.schema, "air.presentation-patch");
+  assert.equal(createPatch.operations.some(op => op.op === "add_collection_item" && op.recordId === "c_999"), true);
+  assert.equal(createPatch.operations.some(op => op.op === "invalidate_metrics"), true);
+
+  // 2. Update patch
+  const updatePatch = computePresentationPatch(ir, {
+    type: "resource_updated",
+    resource: "customers",
+    recordId: "c_999",
+    record: { id: "c_999", name: "Acme Corp Renamed" }
+  }, runtime);
+  assert.equal(updatePatch.operations.some(op => op.op === "update_collection_item" && op.recordId === "c_999"), true);
+  assert.equal(updatePatch.operations.some(op => op.op === "update_detail" && op.recordId === "c_999"), true);
+
+  // 3. Delete / Archive patch
+  const deletePatch = computePresentationPatch(ir, {
+    type: "resource_deleted",
+    resource: "customers",
+    recordId: "c_999"
+  }, runtime);
+  assert.equal(deletePatch.operations.some(op => op.op === "remove_collection_item" && op.recordId === "c_999"), true);
+
+  // 4. Workflow transition patch
+  const transitionPatch = computePresentationPatch(ir, {
+    type: "workflow_transitioned",
+    resource: "expenses",
+    recordId: "exp_01",
+    fromState: "submitted",
+    toState: "approved",
+    action: "approve"
+  }, runtime);
+  assert.equal(transitionPatch.operations.some(op => op.op === "update_workflow_state" && op.toState === "approved"), true);
+  assert.equal(transitionPatch.operations.some(op => op.op === "refresh_workflow_inbox"), true);
+});
+
+test("Reactive UI subscription automatically re-renders on semantic mutations", async () => {
+  const source = await readFile("apps/customer-manager.air", "utf8");
+  const seedSource = await readFile("data/customer-manager.seed.json", "utf8");
+  const model = parseAir(source);
+  const seedData = parseSeedData(seedSource, model);
+  const runtime = new AppRuntime(model, { seedData, principal: { actor: "account_managers", id: "am_01", roles: ["admin"] } });
+  const ir = compilePresentation(model, { runtime });
+
+  const root = {
+    innerHTML: "",
+    attributes: {},
+    removeAttribute(attr) { delete this.attributes[attr]; },
+    querySelectorAll() { return []; },
+    querySelector() { return null; }
+  };
+
+  const app = renderPresentation(root, ir, runtime, { initialScreen: "customers" });
+
+  // Mutate state via runtime
+  const res = runtime.create("customers", {
+    name: "Globex Corporation",
+    email: "globex@example.com",
+    account_manager: "am_01",
+    monthly_revenue: 15000
+  });
+  assert.ok(res.record, "Customer creation should succeed");
+  // The runtime auto-dispatched the semantic event -> UI listener triggered render()
+  assert.ok(root.innerHTML.includes("Globex Corporation"), "DOM should reactively reflect newly created customer");
+
+  runtime.update("customers", res.record.id, { name: "Initech Holdings" });
+  assert.ok(root.innerHTML.includes("Initech Holdings"), "DOM should reactively reflect updated customer name");
+
+  if (typeof app.destroy === "function") {
+    app.destroy();
+  }
+});
+
+test("All presentation conformance fixtures compile deterministically", async () => {
+  const fixtures = [
+    "conformance/presentation/managed-resource.air",
+    "conformance/presentation/read-only-resource.air",
+    "conformance/presentation/resource-with-insight.air",
+    "conformance/presentation/resource-create-authorized.air",
+    "conformance/presentation/resource-create-denied.air",
+    "conformance/presentation/auth-standard.air",
+    "conformance/presentation/user-management.air",
+    "conformance/presentation/marketing-landing.air",
+    "conformance/presentation/marketing-hero-only.air",
+    "conformance/presentation/marketing-motion.air",
+    "conformance/presentation/reactive-mutations.air"
+  ];
+
+  for (const fixture of fixtures) {
+    const source = await readFile(fixture, "utf8");
+    const model = parseAir(source);
+    const ir = compilePresentation(model);
+    assert.equal(ir.schema, "air.presentation-ir");
+    assert.equal(ir.version, 1);
+    assert.ok(ir.screens.length > 0, `Fixture ${fixture} must produce at least 1 screen`);
+  }
+});

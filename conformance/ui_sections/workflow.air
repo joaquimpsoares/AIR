@@ -1,0 +1,10 @@
+air version=2
+app workflow_section_conformance title="Workflow Section Conformance" subtitle="Validates state machine review section composing transition inbox and decision history"
+resource requests label=title
+field requests.title text required
+field requests.status enum values=draft,submitted,approved,rejected default=draft
+manage requests
+process requests state=status initial=draft terminal=approved,rejected
+  transition requests.submit from=draft to=submitted action=submit by=role:member
+  transition requests.approve from=submitted to=approved action=approve by=role:manager
+  transition requests.reject from=submitted to=rejected action=reject by=role:manager comment=required

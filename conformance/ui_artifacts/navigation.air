@@ -1,0 +1,6 @@
+air version=2
+app navigation_artifact title="Adaptive Navigation Artifact Conformance" subtitle="Validates desktop top/sidebar and mobile drawer toggle navigation"
+resource projects label=title
+field projects.title text required
+manage projects
+experience marketing.landing headline="Adaptive Navigation" tagline="Zero-overflow mobile menu with drawer transitions"

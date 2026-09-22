@@ -1,5 +1,24 @@
 export const AIR_VERSION = 2;
 export { compilePresentation, serializePresentationIr, EXPERIENCE_REGISTRY, PRESENTATION_IR_VERSION } from "./presentation.mjs";
+export {
+  VISUAL_DESIGN_IR_VERSION,
+  ARCHETYPES,
+  CHARACTERS,
+  SHELL_TYPES,
+  COMPOSITIONS,
+  PRIORITIES,
+  VISUAL_WEIGHTS,
+  RHYTHMS,
+  TYPOGRAPHY_INTENTS,
+  CARD_POLICIES,
+  MOTION_MODELS,
+  ARCHETYPE_PROFILES,
+  CHARACTER_PROFILES,
+  VISUAL_EXPERIENCES,
+  compileVisualDesign,
+  applyVisualDesignPatch,
+  serializeVisualDesignIr
+} from "./visual_design.mjs";
 export { FAILURE_CATEGORIES, AdapterError, SchemaMapping, validateIdentifier, DataAdapter, MemoryDataAdapter, SqliteDataAdapter, PostgresDataAdapter } from "./data.mjs";
 export { EventEnvelope, ConnectorManifest, Connector, RestConnectorAdapter, McpConnectorAdapter, ConnectorRegistry } from "./connector.mjs";
 export {
@@ -96,6 +115,7 @@ const DECLARATION_KEYS = Object.freeze({
   air: new Set(["version"]),
   app: new Set(["title", "subtitle", "initial"]),
   theme: new Set(["mode", "accent", "density"]),
+  design: new Set(["archetype", "character", "rhythm", "motion", "density", "contrast", "accent"]),
   capability: new Set(),
   resource: new Set(["singular", "plural", "icon", "label"]),
   actor: new Set(),
@@ -118,7 +138,13 @@ const DECLARATION_KEYS = Object.freeze({
   invariant: new Set(["when", "require", "immutable"]),
   deadline: new Set(["state", "after", "escalation"]),
   extension: new Set(["module", "slot"]),
-  experience: new Set(["actor", "identity", "title", "subtitle", "authority", "registration", "verification", "reset", "switch_user", "profile", "security", "sessions"])
+  experience: new Set([
+    "actor", "identity", "title", "subtitle", "authority", "registration", "verification", "reset",
+    "switch_user", "profile", "security", "sessions", "headline", "tagline", "primary_action",
+    "primary_action_url", "secondary_action", "secondary_action_url", "media", "media_alt",
+    "features", "testimonials", "tiers", "items", "stats", "columns", "links", "copyright",
+    "motion", "style", "density", "emphasis", "mood", "radius"
+  ])
 });
 
 const ID_KINDS = new Set([
@@ -126,7 +152,7 @@ const ID_KINDS = new Set([
   "insight", "rule", "highlight", "parameter", "process", "transition",
   "invariant", "deadline", "extension", "experience"
 ]);
-const SINGLETON_KINDS = new Set(["air", "theme", "overview"]);
+const SINGLETON_KINDS = new Set(["air", "theme", "design", "overview"]);
 const FIELD_TYPES = new Set(["text", "email", "phone", "enum", "date", "ref", "number", "money", "bool"]);
 const SEARCHABLE_TYPES = new Set(["text", "email", "phone"]);
 const FILTERABLE_TYPES = new Set(["enum", "ref", "bool"]);
@@ -734,6 +760,7 @@ export function parseAir(source, options = {}) {
   const model = {
     version: null, app: null,
     theme: { mode: "system", accent: "violet", density: "comfortable" },
+    design: null,
     capabilities: new Set(), entities: new Map(), resources: null,
     actors: new Set(), management: new Map(), access: new Map(),
     parameters: new Map(), processes: new Map(), transitions: new Map(),
@@ -773,6 +800,17 @@ export function parseAir(source, options = {}) {
         if (!ACCENTS.has(accent)) fail(`unknown accent \`${accent}\``, declaration);
         if (!DENSITIES.has(density)) fail(`unknown density \`${density}\``, declaration);
         model.theme = { mode, accent, density };
+        break;
+      }
+      case "design": {
+        const archetype = stringProperty(declaration, "archetype", "product_launch");
+        const character = stringProperty(declaration, "character", "technical-premium");
+        const rhythm = stringProperty(declaration, "rhythm", "editorial");
+        const motion = stringProperty(declaration, "motion", "restrained");
+        const density = stringProperty(declaration, "density", "comfortable");
+        const contrast = stringProperty(declaration, "contrast", "high");
+        const accent = stringProperty(declaration, "accent", null);
+        model.design = { archetype, character, rhythm, motion, density, contrast, accent };
         break;
       }
       case "capability":
@@ -1316,7 +1354,26 @@ export class AppRuntime {
     this.capabilityEngine = options.capabilityEngine ?? null;
     this.seedData = options.seedData instanceof Map ? options.seedData : parseSeedData(options.seedData ?? {}, model, { clock: this.clock });
     this.data = new Map();
+    this.subscribers = new Set();
     this.load();
+  }
+
+  subscribe(listener) {
+    if (typeof listener === "function") {
+      this.subscribers.add(listener);
+      return () => this.subscribers.delete(listener);
+    }
+    return () => {};
+  }
+
+  emitChange(event = {}) {
+    for (const listener of [...this.subscribers]) {
+      try {
+        listener({ runtime: this, timestamp: this.clock().toISOString(), ...event });
+      } catch (err) {
+        console.error("Error in runtime change listener:", err);
+      }
+    }
   }
 
   adapter(resourceId) {
@@ -1358,6 +1415,7 @@ export class AppRuntime {
       this.data.set(resource.id, structuredClone(this.seedData.get(resource.id) ?? []));
     }
     this.reconcile();
+    this.emitChange({ type: "reset" });
   }
 
   records(resourceId) {
@@ -1537,12 +1595,17 @@ export class AppRuntime {
     return { record, errors };
   }
 
-  commit(resourceId, records) {
+  commit(resourceId, records, eventMeta = null) {
     this.storage.setItem(this.key(resourceId), JSON.stringify(records));
     this.data.set(resourceId, records);
     const adapter = this.adapter(resourceId);
     if (adapter && typeof adapter.syncFromRuntime === "function") {
       adapter.syncFromRuntime(resourceId, records);
+    }
+    if (eventMeta) {
+      this.emitChange(eventMeta);
+    } else {
+      this.emitChange({ type: "mutation", resource: resourceId });
     }
   }
 
@@ -1561,7 +1624,11 @@ export class AppRuntime {
       events.push(structuredClone(entry));
     }
     const stabilized = this.stabilizeRecord(resourceId, record, events);
-    this.commit(resourceId, [...this.records(resourceId), stabilized]);
+    this.commit(resourceId, [...this.records(resourceId), stabilized], {
+      type: "resource_created",
+      resource: resourceId,
+      record: stabilized
+    });
     this.reconcile();
     return { record: structuredClone(this.records(resourceId).find((item) => item.id === record.id)), errors, events };
   }
@@ -1594,7 +1661,12 @@ export class AppRuntime {
     if (!record) return { record: null, errors };
     if (existing._archived_at) record._archived_at = existing._archived_at;
     if (existing._air_history) record._air_history = structuredClone(existing._air_history);
-    this.commit(resourceId, this.records(resourceId).map((item) => item.id === id ? record : item));
+    this.commit(resourceId, this.records(resourceId).map((item) => item.id === id ? record : item), {
+      type: "resource_updated",
+      resource: resourceId,
+      recordId: id,
+      record
+    });
     this.reconcile();
     return { record: structuredClone(this.records(resourceId).find((item) => item.id === id)), errors };
   }
@@ -1606,7 +1678,11 @@ export class AppRuntime {
     const management = this.model.management.get(resourceId);
     this.assertCan(resourceId, management.lifecycle === "archive" ? "archive" : "delete", target);
     if (management.lifecycle === "archive") {
-      this.commit(resourceId, records.map((record) => record.id === id ? { ...record, _archived_at: this.clock().toISOString() } : record));
+      this.commit(resourceId, records.map((record) => record.id === id ? { ...record, _archived_at: this.clock().toISOString() } : record), {
+        type: "resource_archived",
+        resource: resourceId,
+        recordId: id
+      });
       return { archived: true };
     }
     for (const resource of this.model.entities.values()) {
@@ -1614,7 +1690,11 @@ export class AppRuntime {
         if (this.records(resource.id).some((record) => !record._archived_at && record[field.id] === id)) throw new AirError(`cannot delete: ${resource.plural} still reference this record`);
       }
     }
-    this.commit(resourceId, records.filter((record) => record.id !== id));
+    this.commit(resourceId, records.filter((record) => record.id !== id), {
+      type: "resource_deleted",
+      resource: resourceId,
+      recordId: id
+    });
     return { archived: false };
   }
 
@@ -1788,7 +1868,16 @@ export class AppRuntime {
     const errors = this.validate(resourceId, record, id);
     if (Object.keys(errors).length) throw new AirError(`${titleCase(action)} failed validation: ${Object.values(errors)[0]}`);
     if (completed) record = this.stabilizeRecord(resourceId, record, events);
-    this.commit(resourceId, this.records(resourceId).map((candidate) => candidate.id === id ? record : candidate));
+    this.commit(resourceId, this.records(resourceId).map((candidate) => candidate.id === id ? record : candidate), {
+      type: "workflow_transitioned",
+      resource: resourceId,
+      recordId: id,
+      action,
+      fromState: previous,
+      toState: record[process.state],
+      completed,
+      events
+    });
     return { record: this.enrichRecord(resourceId, record), events, completed, approvals: Math.min(evidence.length + 1, selected.approvals), approvalsRequired: selected.approvals };
   }
 

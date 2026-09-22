@@ -1,0 +1,6 @@
+air version=2
+app pricing_section_conformance title="Pricing Section Conformance" subtitle="Validates subscription tier pricing comparison section with responsive stack"
+resource tiers label=name
+field tiers.name text required
+manage tiers
+experience marketing.landing headline="Predictable Enterprise Pricing" tagline="Transparent pricing with zero hidden fees."

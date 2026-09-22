@@ -1,0 +1,8 @@
+air version=2
+app table_collection_artifact title="Table Collection Artifact Conformance" subtitle="Validates responsive table-to-card recomposition with zero overflow"
+resource customers label=company
+field customers.company text required
+field customers.contact text required
+field customers.email email required
+field customers.status enum values=active,trial,inactive default=trial
+manage customers

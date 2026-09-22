@@ -5,8 +5,6 @@
  * parameter-safe SQL builders, and adapters for In-Memory, SQLite, and PostgreSQL.
  */
 
-import { DatabaseSync } from "node:sqlite";
-
 /**
  * Standard Failure Categories for Universal Data & Connector Layer
  */
@@ -318,6 +316,18 @@ export class MemoryDataAdapter extends DataAdapter {
   }
 }
 
+function getDatabaseSyncClass() {
+  if (typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
+    return process.getBuiltinModule("node:sqlite")?.DatabaseSync ?? null;
+  }
+  if (typeof globalThis !== "undefined" && typeof globalThis.require === "function") {
+    try {
+      return globalThis.require("node:sqlite")?.DatabaseSync ?? null;
+    } catch (_) {}
+  }
+  return null;
+}
+
 /**
  * SQLite DataAdapter (Reference Database Implementation)
  * 
@@ -326,8 +336,19 @@ export class MemoryDataAdapter extends DataAdapter {
 export class SqliteDataAdapter extends DataAdapter {
   constructor(options = {}) {
     super(options);
-    const filename = options.filename ?? ":memory:";
-    this.db = new DatabaseSync(filename);
+    if (options.db) {
+      this.db = options.db;
+    } else {
+      const DatabaseSyncClass = getDatabaseSyncClass();
+      if (!DatabaseSyncClass) {
+        throw new AdapterError(
+          FAILURE_CATEGORIES.UNSUPPORTED,
+          "SqliteDataAdapter requires a Node.js environment with node:sqlite support."
+        );
+      }
+      const filename = options.filename ?? ":memory:";
+      this.db = new DatabaseSyncClass(filename);
+    }
     this.schemaMappings = new Map(); // resource -> SchemaMapping
     this.initializedTables = new Set();
   }

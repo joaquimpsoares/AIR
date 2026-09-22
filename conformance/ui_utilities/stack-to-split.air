@@ -1,0 +1,6 @@
+air version=2
+app stack_to_split_fixture title="Stack to Split Layout Test" subtitle="Validates mobile stack progressing to desktop split composition"
+resource projects label=name
+field projects.name text required
+manage projects
+experience marketing.landing headline="Autonomous Engineering" tagline="Zero glue code compilation" primary_action="Explore" primary_action_url="#story"

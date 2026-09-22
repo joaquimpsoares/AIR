@@ -1,0 +1,6 @@
+air version=2
+app hero_section_conformance title="Hero Section Conformance" subtitle="Validates hero section contract, primary actions, and live compiler stage"
+resource demos label=name
+field demos.name text required
+manage demos
+experience marketing.landing headline="Autonomous Intent Compiler" tagline="Pure semantic intent translated into verifiable multi-platform software." primary_action="Get Started" primary_action_url="#pricing" secondary_action="Architecture" secondary_action_url="#story"

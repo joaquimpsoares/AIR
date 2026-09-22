@@ -1,0 +1,7 @@
+air version=2
+app state_variant_fixture title="Interactive State Variants Test" subtitle="Validates hover focus active disabled and empty state variant compilation"
+resource tasks label=title
+field tasks.title text required
+field tasks.status enum values=pending,in_progress,completed
+manage tasks
+experience marketing.landing headline="Interactive State Machine" tagline="Predictable focus hover and active states"

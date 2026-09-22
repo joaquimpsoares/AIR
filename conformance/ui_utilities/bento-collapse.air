@@ -1,0 +1,6 @@
+air version=2
+app bento_collapse_fixture title="Bento Grid Collapse Test" subtitle="Validates asymmetric bento layout stacking cleanly at mobile widths"
+resource features label=name
+field features.name text required
+manage features
+experience marketing.landing headline="Asymmetric Bento" tagline="Highlighting hero capabilities with visual rhythm"

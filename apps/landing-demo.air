@@ -1,0 +1,12 @@
+air version=2
+app landing_demo title="AIR Platform" subtitle="Autonomous Intent-First Software Compilation"
+theme mode=dark accent=violet
+design archetype=product_launch character=technical-premium rhythm=editorial motion=restrained
+capability storage.local
+resource inquiries label=name
+field inquiries.name text required
+field inquiries.email email required
+field inquiries.plan text
+field inquiries.message text long
+manage inquiries
+experience marketing.landing headline="Compile Software Directly from Intent" tagline="Eliminate boilerplate UI code, fragile state wiring, and manual platform ports. AIR transforms high-level semantics into verifiable, reactive multi-platform experiences." primary_action="Get Started Free" primary_action_url="#pricing" secondary_action="Explore Architecture" secondary_action_url="#compiler_story" motion=pointer_follow

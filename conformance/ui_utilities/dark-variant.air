@@ -1,0 +1,6 @@
+air version=2
+app dark_variant_fixture title="Dark Variant Test" subtitle="Validates dark mode token resolution and utility variant compilation"
+resource themes label=name
+field themes.name text required
+manage themes
+experience marketing.landing headline="Dark Variant Compilation" tagline="Unified token resolution across light and dark modes"

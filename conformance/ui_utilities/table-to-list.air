@@ -1,0 +1,6 @@
+air version=2
+app table_to_list_fixture title="Table to List Test" subtitle="Validates tabular data responsiveness with scrolling containers and card layouts"
+resource records label=title
+field records.title text required
+field records.status enum values=draft,published,archived
+manage records

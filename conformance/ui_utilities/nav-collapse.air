@@ -1,0 +1,6 @@
+air version=2
+app nav_collapse_fixture title="Navigation Collapse Test" subtitle="Validates mobile navigation drawer toggle and desktop horizontal links"
+resource docs label=title
+field docs.title text required
+manage docs
+experience marketing.landing headline="Unified Architecture" tagline="Intent compiler for modern software"

@@ -1,0 +1,10 @@
+air version=2
+app dashboard_section_conformance title="Dashboard Section Conformance" subtitle="Validates executive summary section composing metric grid and recent activity"
+resource sales label=title
+field sales.title text required
+field sales.amount money currency=USD
+field sales.date date
+manage sales
+overview title="Executive Dashboard"
+insight sales.total op=sum field=amount label="Total Revenue"
+insight sales.count op=count label="Closed Deals"

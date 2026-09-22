@@ -1,0 +1,7 @@
+air version=2
+app collection_section_conformance title="Collection Section Conformance" subtitle="Validates resource collection section compiling search, filter, and table/card artifacts"
+resource accounts label=name
+field accounts.name text required
+field accounts.email email required
+field accounts.status enum values=active,trial,inactive default=trial
+manage accounts

@@ -1,0 +1,6 @@
+air version=2
+app pricing_stack_fixture title="Pricing Stack Test" subtitle="Validates pricing tiers stacking on mobile and spreading on desktop"
+resource tiers label=name
+field tiers.name text required
+manage tiers
+experience marketing.landing headline="Transparent Pricing" tagline="Scale with confidence from prototype to cluster"

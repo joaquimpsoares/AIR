@@ -1,0 +1,7 @@
+air version=2
+app filter_bar_artifact title="Filter Bar Artifact Conformance" subtitle="Validates search and categorical filtering controls across viewports"
+resource orders label=id
+field orders.id text required
+field orders.status enum values=pending,shipped,delivered default=pending
+field orders.category enum values=retail,wholesale default=retail
+manage orders

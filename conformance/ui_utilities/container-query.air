@@ -1,0 +1,6 @@
+air version=2
+app container_query_fixture title="Container Query Test" subtitle="Validates layout adaptation based on component container width rather than viewport only"
+resource components label=name
+field components.name text required
+manage components
+experience marketing.landing headline="Container Queries" tagline="Adaptive modular components everywhere"

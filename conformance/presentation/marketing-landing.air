@@ -1,0 +1,6 @@
+air version=2
+app marketing_landing_conformance title="Marketing Conformance App" subtitle="Verifies compilation of composite marketing landing experience"
+resource inquiries label=name
+field inquiries.name text required
+manage inquiries
+experience marketing.landing headline="Next-Gen Software Intent" tagline="Building software from pure declarative semantics" primary_action="Start Now" primary_action_url="#pricing" secondary_action="Docs" secondary_action_url="#features" motion=pointer_follow

@@ -1,0 +1,11 @@
+air version=2
+app workflow_inbox_artifact title="Workflow Inbox Artifact Conformance" subtitle="Validates actionable review queue with transition guards"
+resource expenses label=merchant
+field expenses.merchant text required
+field expenses.amount money currency=USD
+field expenses.status enum values=draft,submitted,approved,paid default=draft
+manage expenses
+process expenses state=status initial=draft terminal=paid
+  transition expenses.submit from=draft to=submitted action=submit by=role:member
+  transition expenses.approve from=submitted to=approved action=approve by=role:manager
+  transition expenses.pay from=approved to=paid action=pay by=role:finance

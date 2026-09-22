@@ -1,0 +1,8 @@
+air version=2
+app editor_section_conformance title="Editor Section Conformance" subtitle="Validates typed form input editor section with validation and submission flow"
+resource profiles label=name
+field profiles.name text required min=2
+field profiles.email email required
+field profiles.role enum values=admin,manager,member default=member
+field profiles.active bool default=true
+manage profiles

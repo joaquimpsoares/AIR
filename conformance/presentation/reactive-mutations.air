@@ -1,0 +1,7 @@
+air version=2
+app reactive_mutations_conformance title="Reactive Mutations App"
+resource tasks label=title
+field tasks.title text required
+field tasks.status enum values=Pending,Active,Completed default=Pending
+field tasks.priority enum values=Low,Medium,High default=Medium
+manage tasks

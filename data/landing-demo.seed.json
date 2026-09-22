@@ -1,0 +1,18 @@
+{
+  "inquiries": [
+    {
+      "id": "inq_01",
+      "name": "Sarah Connor",
+      "email": "sarah@cyberdyne.io",
+      "plan": "Production",
+      "message": "Evaluating AIR for high-assurance resilient infrastructure."
+    },
+    {
+      "id": "inq_02",
+      "name": "Alex Chen",
+      "email": "alex@quantumsys.com",
+      "plan": "Enterprise",
+      "message": "Looking for air-gapped deployment with custom MCP connectors."
+    }
+  ]
+}
