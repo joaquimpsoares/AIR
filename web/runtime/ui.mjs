@@ -8,13 +8,49 @@ import {
   HERO_REPRESENTATION,
   WORKFLOW_REPRESENTATION,
   SHELL_REPRESENTATION,
+  FEATURE_STORY_REPRESENTATION,
+  DASHBOARD_REPRESENTATION,
+  PROOF_REPRESENTATION,
+  PRICING_REPRESENTATION,
+  PRODUCT_STORY_REPRESENTATION,
+  DRAWER_REPRESENTATION,
+  DRAWER_SIZE,
+  DRAWER_STACK_POLICY,
+  MENU_REPRESENTATION,
+  SECTION_RHYTHM,
+  SECTION_RELATIONSHIP,
+  SECTION_RHYTHM_VALUES,
   resolveCollectionArtifactLayout,
   resolveFormArtifactLayout,
   resolveNavigationArtifactLayout,
   resolveHeroArtifactLayout,
   resolveWorkflowArtifactLayout,
-  resolveShellArtifactLayout
+  resolveShellArtifactLayout,
+  resolveFeatureStorySectionLayout,
+  resolveSocialProofSectionLayout,
+  resolvePricingSectionLayout,
+  resolveDashboardSectionLayout,
+  resolveProductStorySectionLayout,
+  resolveDataStorySectionLayout,
+  resolveDataVisualizationLayout,
+  resolveSemanticGraphLayout,
+  resolveDrawerArtifactLayout,
+  resolveMenuArtifactLayout
 } from "./ui_hierarchy.mjs";
+import {
+  VISUAL_INTENTS,
+  DATA_VISUALIZATION_REPRESENTATIONS,
+  SEMANTIC_GRAPH_MODES,
+  SEMANTIC_GRAPH_REPRESENTATIONS,
+  compileVisualizationIR,
+  compileWorkflowGraph,
+  compileTimelineGraph,
+  compileDagGraph
+} from "./visualization_ir.mjs";
+import {
+  renderDataVisualization,
+  renderSemanticGraph
+} from "./visualization_web.mjs";
 import { DemoAuthAdapter } from "./auth.mjs";
 
 const ICONS = Object.freeze({
@@ -136,6 +172,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     containerWidth: initialWidth,
     detail: null,
     modal: null,
+    drawer: null,
+    openMenu: null,
     confirm: null,
     theme: themePreference(presentationIr.theme),
     queries: new Map(),
@@ -187,6 +225,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     state.screenId = screenId;
     state.detail = null;
     state.modal = null;
+    state.drawer = null;
+    state.openMenu = null;
     state.confirm = null;
     if (typeof history !== "undefined" && typeof location !== "undefined") {
       history.replaceState(null, "", `${location.pathname}?demo=${encodeURIComponent(options.demo ?? "demo")}#${screenId}`);
@@ -246,13 +286,19 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     }).join("");
     const rows = records.map((record) => {
       const tone = (runtime && screen?.resource) ? runtime.highlight(screen.resource, record) : null;
+      const isMenuOpen = state.openMenu?.id === `row-menu-${screen?.resource}-${record.id}`;
       return `
       <tr class="${tone ? `highlight-${escapeHtml(tone)}` : ""}" ${interactive && screen?.resource ? `tabindex="0" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}"` : ""}>
         ${columns.map((fieldId) => `<td data-field="${escapeHtml(fieldId)}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
-        ${interactive ? `<td class="row-arrow" aria-label="View record">${icon("chevron", 16)}</td>` : ""}
+        ${interactive && screen?.resource ? `
+          <td class="row-actions" style="text-align: right; width: 44px;">
+            <button class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
+              ${icon("menu", 16)}
+            </button>
+          </td>` : (interactive ? `<td class="row-arrow" aria-label="View record">${icon("chevron", 16)}</td>` : "")}
       </tr>`;
     }).join("");
-    return `<div class="table-wrap"><table class="semantic-table"><thead><tr>${head}${interactive ? '<th class="row-arrow"><span class="sr-only">Actions</span></th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="semantic-table"><thead><tr>${head}${interactive ? '<th class="row-actions" scope="col" style="text-align: right; width: 44px;"><span class="sr-only">Actions</span></th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function renderRecordList(screen, fields, records, interactive = true) {
@@ -263,7 +309,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const cards = records.map((record) => {
       const tone = (runtime && screen?.resource) ? runtime.highlight(screen.resource, record) : null;
       const primaryValue = record[primaryFieldId];
-      const primaryField = screen?.editor?.fields?.find((f) => f.id === primaryFieldId);
+      const isMenuOpen = state.openMenu?.id === `row-menu-${screen?.resource}-${record.id}`;
       
       const rows = secondaryFields.map((field) => {
         const value = record[field.id];
@@ -280,7 +326,13 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
           <div class="record-card-primary">
             <span class="card-field-value primary-value">${valueMarkup(screen, primaryFieldId, primaryValue)}</span>
           </div>
-          ${interactive ? `<span class="card-arrow" aria-hidden="true">${icon("chevron", 16)}</span>` : ""}
+          <div style="display: flex; align-items: center; gap: 4px;">
+            ${interactive && screen?.resource ? `
+              <button class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
+                ${icon("menu", 16)}
+              </button>` : ""}
+            ${interactive ? `<span class="card-arrow" aria-hidden="true">${icon("chevron", 16)}</span>` : ""}
+          </div>
         </div>
         <div class="record-card-body">
           ${rows}
@@ -292,8 +344,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
   }
 
   function renderDashboard(screen) {
+    const dashboardDecision = resolveDashboardSectionLayout(state.containerWidth);
     const metricsSection = screen.sections?.find((s) => s.type === "metrics_grid");
     const recentSection = screen.sections?.find((s) => s.type === "recent_activity");
+    const vizSection = screen.sections?.find((s) => s.type === "data_story" || s.type === "visual_insights" || s.type === "charts");
 
     const metrics = (metricsSection?.metrics ?? []).map((metric) => `
       <article class="metric-card tone-${escapeHtml(metric.tone)}">
@@ -303,17 +357,81 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         <span>Live from ${escapeHtml(metric.source)}</span>
       </article>`).join("");
 
+    let visualChartsMarkup = "";
+    if (vizSection?.charts && vizSection.charts.length > 0) {
+      const charts = vizSection.charts.map((chartSpec) => {
+        const records = runtime ? runtime.records(chartSpec.source || chartSpec.resource) : [];
+        const vizIr = compileVisualizationIR({
+          ...chartSpec,
+          containerWidth: state.containerWidth
+        }, records, { containerWidth: state.containerWidth });
+        return renderDataVisualization(vizIr);
+      }).join("");
+      visualChartsMarkup = `<section class="visualization-grid" data-section-role="data_story" data-section-relationship="independent">${charts}</section>`;
+    } else if (runtime && metricsSection?.metrics?.length > 0) {
+      const firstMetric = metricsSection.metrics.find((m) => m.source && runtime.entities?.has(m.source));
+      if (firstMetric && runtime.records(firstMetric.source).length >= 2) {
+        const records = runtime.records(firstMetric.source);
+        const targetScreen = presentationIr.screens.find((s) => s.resource === firstMetric.source);
+        const statusField = targetScreen?.editor?.fields?.find((f) => f.type === "enum" || f.id === "status" || f.id === "category" || f.id === "state");
+        const dateField = targetScreen?.editor?.fields?.find((f) => f.type === "date" || f.id === "joined" || f.id === "created" || f.id === "date");
+
+        const generatedCharts = [];
+        if (statusField) {
+          const vizIr = compileVisualizationIR({
+            id: `viz_${firstMetric.source}_status`,
+            title: `${targetScreen?.title || firstMetric.source} by ${statusField.label || statusField.id}`,
+            intent: VISUAL_INTENTS.COMPARE,
+            measure: firstMetric.field || "id",
+            aggregate: firstMetric.aggregation === "sum" ? "sum" : "count",
+            dimension: statusField.id,
+            format: firstMetric.format === "currency" ? "currency" : "number",
+            containerWidth: state.containerWidth
+          }, records, { containerWidth: state.containerWidth });
+          generatedCharts.push(renderDataVisualization(vizIr));
+        }
+
+        if (dateField && records.some((r) => r[dateField.id])) {
+          const vizIr = compileVisualizationIR({
+            id: `viz_${firstMetric.source}_trend`,
+            title: `${targetScreen?.title || firstMetric.source} Trend over Time`,
+            intent: VISUAL_INTENTS.TREND,
+            measure: firstMetric.field || "id",
+            aggregate: firstMetric.aggregation === "sum" ? "sum" : "count",
+            dimension: dateField.id,
+            format: firstMetric.format === "currency" ? "currency" : "number",
+            containerWidth: state.containerWidth
+          }, records, { containerWidth: state.containerWidth });
+          generatedCharts.push(renderDataVisualization(vizIr));
+        }
+
+        if (generatedCharts.length > 0) {
+          visualChartsMarkup = `<section class="visualization-grid" data-section-role="data_story" data-section-relationship="independent">${generatedCharts.join("")}</section>`;
+        }
+      }
+    }
+
     const lists = (recentSection?.lists ?? []).map((list) => {
       const targetScreen = presentationIr.screens.find((s) => s.resource === list.source);
       const result = runtime ? runtime.query(list.source, { sort: targetScreen?.collection?.sortChoices?.[0], limit: list.limit, paginate: false }) : { records: [] };
-      return `<section class="panel recent-panel">
+      const listContent = result.records.length
+        ? (state.containerWidth < 640 ? renderRecordList(targetScreen, result.records) : renderTable(targetScreen, list.columns, result.records))
+        : `<div class="empty-state"><div>${icon("collection", 26)}</div><h3>No records yet</h3></div>`;
+
+      return `<section class="panel recent-panel" data-section-role="collection" data-section-relationship="independent" data-section-representation="${escapeHtml(dashboardDecision.representation)}">
         <div class="panel-heading"><div><p class="eyebrow">Latest activity</p><h2>${escapeHtml(list.title)}</h2></div><button class="text-button" data-nav="${escapeHtml(targetScreen?.id ?? state.screenId)}">View all ${icon("chevron", 14)}</button></div>
-        ${result.records.length ? renderTable(targetScreen, list.columns, result.records) : `<div class="empty-state"><div>${icon("collection", 26)}</div><h3>No records yet</h3></div>`}
+        ${listContent}
       </section>`;
     }).join("");
 
-    return `<div class="page-heading"><div><p class="eyebrow">Workspace</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div><span class="date-chip">${new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span></div>
-      <section class="metric-grid" aria-label="Key metrics">${metrics}</section>${lists}`;
+    const metricGridClass = dashboardDecision.representation === DASHBOARD_REPRESENTATION.DASHBOARD_STACK ? "single-column" : dashboardDecision.representation === DASHBOARD_REPRESENTATION.DASHBOARD_CONDENSED ? "two-column" : "";
+
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading"><div><p class="eyebrow">Workspace</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div><span class="date-chip">${new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span></div>
+      <section class="metric-grid ${metricGridClass}" data-section-role="metrics" data-section-relationship="independent" data-section-representation="${escapeHtml(dashboardDecision.representation)}" aria-label="Key metrics">${metrics}</section>
+      ${visualChartsMarkup}
+      ${lists}
+    </div>`;
   }
 
   function filterOptions(screen, fieldId) {
@@ -383,8 +501,9 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       collectionContent = renderTable(screen, screen.collection.columns, result.records);
     }
 
-    return `<div class="page-heading collection-heading"><div><p class="eyebrow">${escapeHtml(screen.title)}</p><h1>${escapeHtml(screen.title)}</h1><p>Manage ${escapeHtml(screen.title.toLowerCase())}</p></div>${createButton}</div>
-      <section class="panel collection-panel" data-collection-representation="${escapeHtml(layoutDecision.representation || layoutDecision.mode)}">
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading collection-heading"><div><p class="eyebrow">${escapeHtml(screen.title)}</p><h1>${escapeHtml(screen.title)}</h1><p>Manage ${escapeHtml(screen.title.toLowerCase())}</p></div>${createButton}</div>
+      <section class="panel collection-panel" data-section-role="collection" data-section-relationship="independent" data-collection-representation="${escapeHtml(layoutDecision.representation || layoutDecision.mode)}">
         <div class="toolbar">
           <label class="search-control">${icon("search", 17)}<span class="sr-only">Search ${escapeHtml(screen.title)}</span><input type="search" data-search placeholder="Search ${escapeHtml(screen.title.toLowerCase())}…" value="${escapeHtml(query.search)}"></label>
           <div class="toolbar-actions">${filters}<label class="select-control sort-control">${icon("sort", 15)}<span class="sr-only">Sort</span><select data-sort>${sortOptions}</select></label></div>
@@ -392,7 +511,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         <div class="result-meta"><span><strong>${result.total}</strong> ${result.total === 1 ? screen.singular.toLowerCase() : screen.title.toLowerCase()}</span>${hasActiveFilters ? '<button class="text-button" data-clear-filters>Clear filters</button>' : ""}</div>
         ${collectionContent}
         <div class="pagination"><span>${from}–${to} of ${result.total}</span><div><button class="icon-button" data-page="${result.page - 1}" ${result.page <= 1 ? "disabled" : ""} aria-label="Previous page">${icon("back", 16)}</button><span>Page ${result.page} of ${result.totalPages}</span><button class="icon-button next" data-page="${result.page + 1}" ${result.page >= result.totalPages ? "disabled" : ""} aria-label="Next page">${icon("chevron", 16)}</button></div></div>
-      </section>`;
+      </section>
+    </div>`;
   }
 
   function renderWorkflowInbox(screen) {
@@ -424,8 +544,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       </li>`;
     }).join("") : `<div class="empty-state"><div>${icon("check", 28)}</div><h3>All caught up</h3><p>You have no pending approvals or actions requiring attention.</p></div>`;
 
-    return `<div class="page-heading"><div><p class="eyebrow">Tasks</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div></div>
-      <section class="panel inbox-panel"><ol class="inbox-list" aria-label="Pending review items">${itemsMarkup}</ol></section>`;
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading"><div><p class="eyebrow">Tasks</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div></div>
+      <section class="panel inbox-panel" data-section-role="workflow_inbox" data-section-relationship="independent"><ol class="inbox-list" aria-label="Pending review items">${itemsMarkup}</ol></section>
+    </div>`;
   }
 
   function renderAuthLogin(screen) {
@@ -625,11 +747,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       active: true
     };
 
-    return `<div class="page-heading">
-      <div><p class="eyebrow">Account</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
-    </div>
-    <div class="panel-grid">
-      <section class="panel">
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading">
+        <div><p class="eyebrow">Account</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
+      </div>
+      <section class="panel" data-section-role="account_profile" data-section-relationship="independent">
         <div class="panel-heading"><div><h2>Profile Details</h2></div></div>
         <form id="profile-form" novalidate>
           <div class="form-grid">
@@ -663,11 +785,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const principal = runtime?.principal;
     const sessions = [...authAdapter.sessions.values()].filter((s) => s.userId === principal?.id);
 
-    return `<div class="page-heading">
-      <div><p class="eyebrow">Account</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
-    </div>
-    <div class="panel-grid">
-      <section class="panel">
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading">
+        <div><p class="eyebrow">Account</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
+      </div>
+      <section class="panel" data-section-role="account_password" data-section-relationship="independent">
         <div class="panel-heading"><div><h2>Change Password</h2></div></div>
         <form id="change-password-form" novalidate>
           <div class="form-grid">
@@ -690,7 +812,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-section-role="active_sessions" data-section-relationship="independent">
         <div class="panel-heading">
           <div><h2>Active Sessions</h2><p>Manage devices and active authentication tokens</p></div>
           ${sessions.filter((s) => s.id !== authAdapter.currentSessionId).length > 0 ? '<button class="button secondary" data-revoke-others>Revoke all other sessions</button>' : ""}
@@ -719,40 +841,42 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const principal = runtime?.principal;
     const users = authAdapter.users ?? [];
 
-    return `<div class="page-heading">
-      <div><p class="eyebrow">Administration</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
-    </div>
-    <section class="panel">
-      <div class="panel-heading"><div><h2>System Accounts (${users.length})</h2></div></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Identity</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            ${users.map((u) => `
-              <tr>
-                <td><strong>${escapeHtml(u.name)}</strong><br><small>${escapeHtml(u.id)}</small></td>
-                <td>${escapeHtml(u.email)}</td>
-                <td>
-                  <select data-admin-role="${escapeHtml(u.id)}" ${u.id === principal?.id ? "disabled title='Cannot demote self'" : ""}>
-                    <option value="admin" ${u.roles.includes("admin") ? "selected" : ""}>Admin</option>
-                    <option value="manager" ${u.roles.includes("manager") ? "selected" : ""}>Manager</option>
-                    <option value="member" ${u.roles.includes("member") ? "selected" : ""}>Member</option>
-                  </select>
-                </td>
-                <td>
-                  <span class="badge ${u.active ? "positive" : "danger"}"><span></span>${u.active ? "Active" : "Deactivated"}</span>
-                  <span class="badge ${u.verified ? "positive" : "warning"}"><span></span>${u.verified ? "Verified" : "Unverified"}</span>
-                </td>
-                <td>
-                  ${u.id !== principal?.id ? `<button class="button ${u.active ? "danger-ghost" : "secondary"}" data-admin-toggle-active="${escapeHtml(u.id)}">${u.active ? "Deactivate" : "Activate"}</button>` : '<small class="text-muted">Self</small>'}
-                </td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <div class="page-heading">
+        <div><p class="eyebrow">Administration</p><h1>${escapeHtml(screen.title)}</h1><p>${escapeHtml(screen.subtitle)}</p></div>
       </div>
-    </section>`;
+      <section class="panel" data-section-role="user_management" data-section-relationship="independent">
+        <div class="panel-heading"><div><h2>System Accounts (${users.length})</h2></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Identity</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              ${users.map((u) => `
+                <tr>
+                  <td><strong>${escapeHtml(u.name)}</strong><br><small>${escapeHtml(u.id)}</small></td>
+                  <td>${escapeHtml(u.email)}</td>
+                  <td>
+                    <select data-admin-role="${escapeHtml(u.id)}" ${u.id === principal?.id ? "disabled title='Cannot demote self'" : ""}>
+                      <option value="admin" ${u.roles.includes("admin") ? "selected" : ""}>Admin</option>
+                      <option value="manager" ${u.roles.includes("manager") ? "selected" : ""}>Manager</option>
+                      <option value="member" ${u.roles.includes("member") ? "selected" : ""}>Member</option>
+                    </select>
+                  </td>
+                  <td>
+                    <span class="badge ${u.active ? "positive" : "danger"}"><span></span>${u.active ? "Active" : "Deactivated"}</span>
+                    <span class="badge ${u.verified ? "positive" : "warning"}"><span></span>${u.verified ? "Verified" : "Unverified"}</span>
+                  </td>
+                  <td>
+                    ${u.id !== principal?.id ? `<button class="button ${u.active ? "danger-ghost" : "secondary"}" data-admin-toggle-active="${escapeHtml(u.id)}">${u.active ? "Deactivate" : "Activate"}</button>` : '<small class="text-muted">Self</small>'}
+                  </td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>`;
   }
 
   function renderDetail() {
@@ -773,11 +897,29 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     
     const workflowActions = runtime ? runtime.availableActions(entityId, recordId).map((action) => `<button class="button primary" data-transition="${escapeHtml(action.action)}" data-comment="${escapeHtml(action.comment)}">${escapeHtml(action.label)}</button>`).join("") : "";
     const history = runtime ? runtime.history(entityId, recordId) : [];
-    const historyMarkup = history.length ? `<section class="panel history-panel"><div class="panel-heading"><div><p class="eyebrow">Immutable history</p><h2>Workflow decisions</h2></div></div><ol>${history.map((entry) => `<li><strong>${escapeHtml(displayStatus(entry.event))}</strong><span>${escapeHtml(entry.actor?.id ?? "system")} · ${escapeHtml(new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.at)))}</span>${entry.comment ? `<p>${escapeHtml(entry.comment)}</p>` : ""}${!entry.completed ? '<small>Awaiting additional approval</small>' : ""}</li>`).join("")}</ol></section>` : "";
-    
-    return `<button class="back-button" data-close-detail>${icon("back", 16)} Back to ${escapeHtml(screen.title)}</button>
-      <div class="detail-hero"><div class="detail-identity"><span class="avatar large">${escapeHtml(initials(title))}</span><div><p class="eyebrow">${escapeHtml(screen.singular)} profile</p><h1>${escapeHtml(title)}</h1><span class="record-id">${escapeHtml(record.id)}</span></div></div><div class="detail-actions">${workflowActions}${editButton}${deleteButton}</div></div>
-      <section class="panel detail-panel"><div class="panel-heading"><div><p class="eyebrow">Record details</p><h2>Information</h2></div></div><dl>${screen.editor.fields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${valueMarkup(screen, field.id, record[field.id], true)}</dd></div>`).join("")}</dl></section>${historyMarkup}`;
+
+    // Semantic Workflow Graph Artifact
+    let workflowGraphMarkup = "";
+    const proc = runtime?.processes?.get ? runtime.processes.get(entityId) : runtime?.processes?.[entityId];
+    if (proc) {
+      const graphIr = compileWorkflowGraph(proc, record, { containerWidth: state.containerWidth });
+      workflowGraphMarkup = renderSemanticGraph(graphIr);
+    }
+
+    // Semantic Timeline Graph Artifact
+    let timelineGraphMarkup = "";
+    if (history.length > 0) {
+      const timelineIr = compileTimelineGraph(history, { containerWidth: state.containerWidth });
+      timelineGraphMarkup = renderSemanticGraph(timelineIr);
+    }
+
+    return `<div class="section-stack" data-section-rhythm="comfortable">
+      <button class="back-button" data-close-detail>${icon("back", 16)} Back to ${escapeHtml(screen.title)}</button>
+      <div class="detail-hero" data-section-role="hero" data-section-relationship="independent"><div class="detail-identity"><span class="avatar large">${escapeHtml(initials(title))}</span><div><p class="eyebrow">${escapeHtml(screen.singular)} profile</p><h1>${escapeHtml(title)}</h1><span class="record-id">${escapeHtml(record.id)}</span></div></div><div class="detail-actions">${workflowActions}${editButton}${deleteButton}</div></div>
+      ${workflowGraphMarkup}
+      <section class="panel detail-panel" data-section-role="detail" data-section-relationship="independent"><div class="panel-heading"><div><p class="eyebrow">Record details</p><h2>Information</h2></div></div><dl>${screen.editor.fields.map((field) => `<div><dt>${escapeHtml(field.label)}</dt><dd>${valueMarkup(screen, field.id, record[field.id], true)}</dd></div>`).join("")}</dl></section>
+      ${timelineGraphMarkup}
+    </div>`;
   }
 
   function highlightCompilerSnippet(code) {
@@ -794,9 +936,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const primary = raw.primaryAction;
     const secondary = raw.secondaryAction;
     const motionAttr = section.motion ? `data-motion="${escapeHtml(section.motion.type)}"` : "";
+    const heroDecision = resolveHeroArtifactLayout(state.containerWidth);
+    const isStacked = heroDecision.representation === HERO_REPRESENTATION.STACKED;
 
-    return `<header class="landing-hero motion-spotlight" ${motionAttr} id="hero">
-      <div class="landing-hero-composition">
+    return `<header class="landing-hero motion-spotlight" ${motionAttr} id="hero" data-hero-representation="${escapeHtml(heroDecision.representation)}">
+      <div class="landing-hero-composition ${isStacked ? "stacked-hero" : ""}">
         <div class="landing-hero-content">
           <div class="hero-eyebrow-badge">
             <span class="hero-badge-dot"></span>
@@ -918,15 +1062,16 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const raw = section.rawSection ?? section;
     const motionAttr = section.motion ? `data-motion="${escapeHtml(section.motion.type)}"` : "";
     const featureLayout = section.featureLayout;
+    const sectionDecision = resolveFeatureStorySectionLayout(state.containerWidth);
 
     if (section.composition === COMPOSITIONS.FLAT_FEATURE_LIST) {
-      return `<section class="landing-section minimal-feature-section" id="features" ${motionAttr}>
+      return `<section class="landing-section minimal-feature-section" id="features" ${motionAttr} data-section-representation="${escapeHtml(sectionDecision.representation)}">
         <div class="landing-section-heading">
           <p class="eyebrow">Capabilities</p>
           <h2>${escapeHtml(raw.title ?? "Capabilities")}</h2>
           <p>${escapeHtml(raw.subtitle ?? "")}</p>
         </div>
-        <div class="flat-feature-list">
+        <div class="flat-feature-list ${state.containerWidth < 640 ? "stacked" : ""}">
           ${(raw.items ?? []).map((item, idx) => `
             <div class="flat-feature-row">
               <div class="flat-feature-index">0${idx + 1}</div>
@@ -941,13 +1086,13 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     }
 
     if (section.composition === COMPOSITIONS.EDITORIAL_NARRATIVE) {
-      return `<section class="landing-section editorial-feature-section" id="features" ${motionAttr}>
+      return `<section class="landing-section editorial-feature-section" id="features" ${motionAttr} data-section-representation="${escapeHtml(sectionDecision.representation)}">
         <div class="landing-section-heading">
           <p class="eyebrow">Architecture & Guarantees</p>
           <h2>${escapeHtml(raw.title ?? "System Philosophy")}</h2>
           <p>${escapeHtml(raw.subtitle ?? "")}</p>
         </div>
-        <div class="editorial-columns">
+        <div class="editorial-columns ${state.containerWidth < 768 ? "single-column" : ""}">
           ${(raw.items ?? []).map((item) => `
             <article class="editorial-story-item">
               <h3>${escapeHtml(item.title)}</h3>
@@ -958,34 +1103,39 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       </section>`;
     }
 
-    // Default / Asymmetric Bento Grid
+    // Dominant Anchor Feature Layout
     if (featureLayout && featureLayout.dominantAnchor) {
-      return `<section class="landing-section feature-section" id="features" ${motionAttr}>
+      const isNarrow = sectionDecision.representation === FEATURE_STORY_REPRESENTATION.NARRATIVE_STACK;
+      const isBalanced = sectionDecision.representation === FEATURE_STORY_REPRESENTATION.BALANCED_GRID;
+      const gridClass = isNarrow ? "narrative-stack" : isBalanced ? "balanced-grid" : "bento-grid";
+      const previewStackedClass = state.containerWidth < 500 ? "stacked-metrics" : "";
+
+      return `<section class="landing-section feature-section" id="features" ${motionAttr} data-section-representation="${escapeHtml(sectionDecision.representation)}">
         <div class="landing-section-heading">
           <p class="eyebrow">Capabilities & Invariants</p>
           <h2>${escapeHtml(raw.title ?? "Built for Autonomous Engineering")}</h2>
           <p>${escapeHtml(raw.subtitle ?? "Everything you need to build robust, verifiable software systems.")}</p>
         </div>
-        <div class="feature-grid bento-grid">
-          <article class="bento-card dominant-card motion-card">
+        <div class="feature-grid ${gridClass}">
+          <article class="bento-card dominant-card motion-card ${isNarrow ? "stacked-card" : ""}">
             <div class="bento-card-badge"><span class="badge positive"><span></span>Core Capability</span></div>
             <div class="bento-card-icon large">${icon(featureLayout.dominantAnchor.icon ?? "spark", 30)}</div>
             <h3>${escapeHtml(featureLayout.dominantAnchor.title)}</h3>
             <p class="dominant-desc">${escapeHtml(featureLayout.dominantAnchor.description)}</p>
-            <div class="dominant-visual-preview">
+            <div class="dominant-visual-preview ${previewStackedClass}">
               <div class="preview-metric"><span>Invariant Assurance</span><strong>100% Deterministic</strong></div>
               <div class="preview-metric"><span>Boilerplate Generated</span><strong>0 Lines</strong></div>
             </div>
           </article>
           ${(featureLayout.supportingStories ?? []).map((item, idx) => `
-            <article class="bento-card supporting-card motion-card">
+            <article class="bento-card supporting-card motion-card ${isNarrow ? "stacked-card" : ""}">
               <div class="bento-card-icon">${icon(item.icon ?? (idx === 0 ? "check" : "collection"), 22)}</div>
               <h4>${escapeHtml(item.title)}</h4>
               <p>${escapeHtml(item.description)}</p>
             </article>
           `).join("")}
           ${featureLayout.proofHighlight ? `
-            <article class="bento-card proof-card motion-card">
+            <article class="bento-card proof-card motion-card ${isNarrow ? "stacked-card" : ""}">
               <div class="bento-card-icon">${icon(featureLayout.proofHighlight.icon ?? "lock", 22)}</div>
               <h4>${escapeHtml(featureLayout.proofHighlight.title)}</h4>
               <p>${escapeHtml(featureLayout.proofHighlight.description)}</p>
@@ -1004,18 +1154,21 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       </article>
     `).join("");
 
-    return `<section class="landing-section feature-section" id="features" ${motionAttr}>
+    return `<section class="landing-section feature-section" id="features" ${motionAttr} data-section-representation="${escapeHtml(sectionDecision.representation)}">
       <div class="landing-section-heading">
         <p class="eyebrow">Capabilities</p>
         <h2>${escapeHtml(raw.title ?? "Capabilities")}</h2>
         <p>${escapeHtml(raw.subtitle ?? "")}</p>
       </div>
-      <div class="feature-grid">${items}</div>
+      <div class="feature-grid ${sectionDecision.representation === FEATURE_STORY_REPRESENTATION.NARRATIVE_STACK ? "narrative-stack" : ""}">${items}</div>
     </section>`;
   }
 
   function renderSocialProofSection(section) {
     const raw = section.rawSection ?? section;
+    const proofDecision = resolveSocialProofSectionLayout(state.containerWidth);
+    const isStacked = proofDecision.representation === PROOF_REPRESENTATION.PROOF_STACK;
+
     const stats = (raw.stats ?? [
       { label: "Token Compression", value: "94%" },
       { label: "Execution Latency", value: "< 2ms" },
@@ -1038,19 +1191,22 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       </blockquote>
     `).join("");
 
-    return `<section class="landing-section social-proof-section" id="proof">
+    return `<section class="landing-section social-proof-section" id="proof" data-section-representation="${escapeHtml(proofDecision.representation)}">
       <div class="landing-section-heading">
         <p class="eyebrow">Empirical Verification</p>
         <h2>${escapeHtml(raw.title ?? "Proven Quantitative Reductions")}</h2>
         <p>${escapeHtml(raw.subtitle ?? "Measured across complex enterprise applications.")}</p>
       </div>
-      ${stats ? `<div class="stats-callout-grid">${stats}</div>` : ""}
-      ${testimonials ? `<div class="editorial-quotes-wrap">${testimonials}</div>` : ""}
+      ${stats ? `<div class="stats-callout-grid ${isStacked ? "stacked-stats" : ""}">${stats}</div>` : ""}
+      ${testimonials ? `<div class="editorial-quotes-wrap ${isStacked ? "single-column" : ""}">${testimonials}</div>` : ""}
     </section>`;
   }
 
   function renderPricingSection(section) {
     const raw = section.rawSection ?? section;
+    const pricingDecision = resolvePricingSectionLayout(state.containerWidth);
+    const isSequential = pricingDecision.representation === PRICING_REPRESENTATION.SEQUENTIAL_PLANS;
+
     const tiers = (raw.tiers ?? []).map((tier) => `
       <article class="pricing-card ${tier.popular ? "popular" : ""}">
         ${tier.popular ? '<div class="pricing-badge">Most Popular</div>' : ""}
@@ -1071,13 +1227,13 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       </article>
     `).join("");
 
-    return `<section class="landing-section pricing-section" id="pricing">
+    return `<section class="landing-section pricing-section" id="pricing" data-section-representation="${escapeHtml(pricingDecision.representation)}">
       <div class="landing-section-heading">
         <p class="eyebrow">Pricing Plans</p>
         <h2>${escapeHtml(raw.title ?? "Predictable, Transparent Pricing")}</h2>
         <p>${escapeHtml(raw.subtitle ?? "Scale seamlessly from local prototype to distributed enterprise cluster.")}</p>
       </div>
-      <div class="pricing-grid">${tiers}</div>
+      <div class="pricing-grid ${isSequential ? "sequential-plans" : ""}">${tiers}</div>
     </section>`;
   }
 
@@ -1172,7 +1328,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       }
     }).join("");
 
-    return `<div class="marketing-landing" data-marketing-landing>${sectionsHtml}</div>`;
+    return `<div class="marketing-landing section-stack" data-section-rhythm="spacious" data-marketing-landing>${sectionsHtml}</div>`;
   }
 
   function renderPage() {
@@ -1212,6 +1368,167 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       control = `<input ${common} type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder)}" ${field.min ? `minlength="${field.min}"` : ""} ${field.type === "money" ? 'step="0.01"' : ""}>`;
     }
     return `<label class="field ${field.type === "text" && field.long ? "span-2" : ""}" for="${id}"><span>${escapeHtml(field.label)}${field.required ? '<i aria-hidden="true">*</i>' : ""}</span>${control}${error ? `<small class="field-error" id="${id}-error">${escapeHtml(error)}</small>` : ""}</label>`;
+  }
+
+  function renderDrawer() {
+    if (!state.drawer) return "";
+    const { purpose, entityId, recordId, size = DRAWER_SIZE.STANDARD } = state.drawer;
+    const drawerDecision = resolveDrawerArtifactLayout(state.containerWidth, size);
+    const formDecision = resolveFormArtifactLayout(state.containerWidth);
+    const screen = presentationIr.screens.find((s) => s.resource === entityId);
+
+    if (purpose === "create" || purpose === "edit") {
+      const editing = Boolean(recordId);
+      const record = editing && runtime ? runtime.records(screen.resource).find((item) => item.id === recordId) : {};
+      const values = state.drawer.values ?? record ?? {};
+      const fields = editing && runtime
+        ? runtime.editableFields(screen.resource, record).map((f) => screen.editor.fields.find((ef) => ef.id === f.id)).filter(Boolean)
+        : (screen?.editor?.fields ?? []).filter((field) => !field.readOnly && field.id !== "workflow_status");
+
+      return `<div class="drawer-backdrop" data-dismiss-drawer>
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}">
+          <header class="drawer-header">
+            <div>
+              <p class="eyebrow">${editing ? "Update record" : "New record"}</p>
+              <h2 id="drawer-title">${editing ? `Edit ${escapeHtml(screen?.singular ?? "Record")}` : `Add ${escapeHtml(screen?.singular ?? "Record")}`}</h2>
+            </div>
+            <button class="icon-button" data-close-drawer aria-label="Close drawer">${icon("close", 18)}</button>
+          </header>
+          <div class="drawer-body">
+            <form id="drawer-record-form" data-entity="${escapeHtml(screen?.resource ?? entityId)}" data-record="${escapeHtml(recordId ?? "")}" novalidate>
+              <div class="form-grid ${formDecision.representation === FORM_REPRESENTATION.SINGLE_COLUMN ? "single-column" : "multi-column"}">
+                ${fields.map((field) => inputFor(screen, field, values[field.id] ?? field.defaultValue ?? "", state.drawer.errors?.[field.id])).join("")}
+              </div>
+            </form>
+          </div>
+          <footer class="drawer-footer">
+            <button type="button" class="button secondary" data-close-drawer>Cancel</button>
+            <button type="submit" form="drawer-record-form" class="button primary">${editing ? "Save changes" : `Create ${escapeHtml(screen?.singular ?? "Record")}`}</button>
+          </footer>
+        </aside>
+      </div>`;
+    }
+
+    if (purpose === "detail") {
+      const record = runtime ? runtime.get(entityId, recordId) : null;
+      if (!record || !screen) {
+        state.drawer = null;
+        return "";
+      }
+      const title = runtime ? runtime.displayValue(entityId, screen.labelField, record[screen.labelField]) : record.id;
+      const editAllowed = runtime ? runtime.can(entityId, "edit", record) && runtime.editableFields(entityId, record).length > 0 : true;
+      const editButton = editAllowed ? `<button class="button secondary" data-drawer-edit="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("edit", 16)} Edit</button>` : "";
+      
+      const deleteAction = screen.actions?.find((a) => a.intent === "delete" || a.intent === "archive");
+      const canDelete = runtime ? runtime.can(entityId, deleteAction?.intent ?? "delete", record) : true;
+      const deleteButton = canDelete ? `<button class="button danger-ghost" data-delete="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("trash", 16)} ${escapeHtml(deleteAction?.label ?? "Delete")}</button>` : "";
+      
+      const workflowActions = runtime ? runtime.availableActions(entityId, recordId).map((action) => `<button class="button primary" data-transition="${escapeHtml(action.action)}" data-comment="${escapeHtml(action.comment)}">${escapeHtml(action.label)}</button>`).join("") : "";
+
+      const history = runtime ? runtime.history(entityId, recordId) : [];
+      let workflowGraphMarkup = "";
+      const proc = runtime?.processes?.get ? runtime.processes.get(entityId) : runtime?.processes?.[entityId];
+      if (proc) {
+        const graphIr = compileWorkflowGraph(proc, record, { containerWidth: state.containerWidth });
+        workflowGraphMarkup = `<div style="margin-top: 16px;">${renderSemanticGraph(graphIr)}</div>`;
+      }
+
+      return `<div class="drawer-backdrop" data-dismiss-drawer>
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}">
+          <header class="drawer-header">
+            <div>
+              <p class="eyebrow">${escapeHtml(screen.singular)} details</p>
+              <h2 id="drawer-title">${escapeHtml(title)}</h2>
+            </div>
+            <button class="icon-button" data-close-drawer aria-label="Close drawer">${icon("close", 18)}</button>
+          </header>
+          <div class="drawer-body drawer-detail-section">
+            <div class="drawer-detail-grid">
+              ${screen.editor.fields.map((field) => `
+                <div class="drawer-detail-item ${field.type === "text" && field.long ? "span-2" : ""}">
+                  <span class="drawer-detail-label">${escapeHtml(field.label)}</span>
+                  <span class="drawer-detail-value">${valueMarkup(screen, field.id, record[field.id], false)}</span>
+                </div>
+              `).join("")}
+            </div>
+            ${workflowGraphMarkup}
+          </div>
+          <footer class="drawer-footer">
+            <button type="button" class="button secondary" data-close-drawer>Close</button>
+            ${workflowActions}
+            ${editButton}
+            ${deleteButton}
+          </footer>
+        </aside>
+      </div>`;
+    }
+
+    if (purpose === "filter") {
+      const q = queryState(screen);
+      return `<div class="drawer-backdrop" data-dismiss-drawer>
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="compact">
+          <header class="drawer-header">
+            <div>
+              <p class="eyebrow">Filters</p>
+              <h2 id="drawer-title">Filter ${escapeHtml(screen?.plural ?? screen?.title ?? "Records")}</h2>
+            </div>
+            <button class="icon-button" data-close-drawer aria-label="Close drawer">${icon("close", 18)}</button>
+          </header>
+          <div class="drawer-body" style="display: flex; flex-direction: column; gap: 16px;">
+            <label class="field">
+              <span>Search</span>
+              <input type="search" placeholder="Search ${escapeHtml(screen?.plural?.toLowerCase() ?? "records")}…" value="${escapeHtml(q.search)}" data-filter-search>
+            </label>
+            ${(screen?.collection?.filterableFields ?? []).map((fieldId) => {
+              const field = screen.editor.fields.find((f) => f.id === fieldId);
+              if (!field) return "";
+              if (field.type === "enum") {
+                return `<label class="field">
+                  <span>${escapeHtml(field.label)}</span>
+                  <select data-filter-select="${escapeHtml(fieldId)}">
+                    <option value="">All ${escapeHtml(field.label.toLowerCase())}</option>
+                    ${field.options.map((opt) => `<option value="${escapeHtml(opt)}" ${q.filters[fieldId] === opt ? "selected" : ""}>${escapeHtml(displayStatus(opt))}</option>`).join("")}
+                  </select>
+                </label>`;
+              }
+              return "";
+            }).join("")}
+          </div>
+          <footer class="drawer-footer">
+            <button type="button" class="button secondary" data-filter-clear>Reset</button>
+            <button type="button" class="button primary" data-close-drawer>Done</button>
+          </footer>
+        </aside>
+      </div>`;
+    }
+
+    return "";
+  }
+
+  function renderMenu() {
+    if (!state.openMenu) return "";
+    const { items, position, isMobileSheet } = state.openMenu;
+    const menuDecision = resolveMenuArtifactLayout(state.containerWidth);
+    const isSheet = isMobileSheet || menuDecision.representation === MENU_REPRESENTATION.COMPACT_SHEET;
+
+    let style = "";
+    if (!isSheet && position) {
+      style = `top: ${position.top}px; left: ${position.left}px;`;
+    }
+
+    return `<div class="menu-backdrop" data-dismiss-menu>
+      <div class="menu-dropdown" role="menu" data-menu-panel data-representation="${isSheet ? "compact_sheet" : "dropdown"}" style="${style}" tabindex="-1">
+        ${items.map((it, idx) => {
+          if (it.separator) return '<div class="menu-separator" role="separator"></div>';
+          return `
+            <button class="menu-item ${it.tone === "destructive" ? "destructive" : ""}" role="menuitem" data-menu-action="${escapeHtml(it.id)}" data-tone="${escapeHtml(it.tone ?? "neutral")}" ${it.disabled ? "disabled" : ""} tabindex="-1" data-index="${idx}">
+              ${it.icon ? icon(it.icon, 16) : ""}
+              <span>${escapeHtml(it.label)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </div>`;
   }
 
   function renderModal() {
@@ -1297,6 +1614,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         </header>
         <main class="public-content" tabindex="-1">${renderPage()}</main>
         <div id="air-toast" class="toast" role="status" aria-live="polite"></div>
+        ${renderDrawer()}
+        ${renderMenu()}
       </div>`;
     } else {
       // Authenticated Application Shell
@@ -1338,7 +1657,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         `}
         <main class="content" tabindex="-1">${renderPage()}</main>
         ${isCompactShell ? `<nav class="mobile-nav" aria-label="Primary navigation">${renderNav()}</nav>` : ""}
-      </div><div id="air-toast" class="toast" role="status" aria-live="polite"></div>${renderModal()}${renderConfirm()}`;
+      </div><div id="air-toast" class="toast" role="status" aria-live="polite"></div>${renderModal()}${renderConfirm()}${renderDrawer()}${renderMenu()}`;
     }
     bindEvents();
   }
@@ -1401,20 +1720,44 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       if (!confirm("Reset all demo records to their original seed data?")) return;
       if (runtime) runtime.reset();
       state.detail = null;
+      state.drawer = null;
       render();
       notify("Demo data restored");
     });
 
-    root.querySelector("[data-create]")?.addEventListener("click", (event) => {
-      state.modal = { entityId: event.currentTarget.dataset.create, errors: {} };
-      render();
+    // Drawer and Create/Edit/Detail Triggers
+    root.querySelectorAll("[data-create]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        const entityId = event.currentTarget.dataset.create;
+        state.drawer = {
+          purpose: "create",
+          entityId,
+          size: DRAWER_SIZE.STANDARD,
+          values: {},
+          errors: {},
+          isDirty: false,
+          previousFocusedElement: document.activeElement
+        };
+        render();
+        root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+      });
     });
 
     root.querySelectorAll("[data-detail]").forEach((row) => {
       const open = () => {
         const [entityId, recordId] = row.dataset.detail.split(":");
-        state.detail = { entityId, recordId };
+        state.drawer = {
+          purpose: "detail",
+          entityId,
+          recordId,
+          size: DRAWER_SIZE.STANDARD,
+          values: {},
+          errors: {},
+          isDirty: false,
+          previousFocusedElement: document.activeElement
+        };
         render();
+        root.querySelector("[data-drawer-panel]")?.querySelector("button, input, select, textarea")?.focus();
       };
       row.addEventListener("click", open);
       row.addEventListener("keydown", (event) => {
@@ -1425,15 +1768,295 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       });
     });
 
-    root.querySelector("[data-close-detail]")?.addEventListener("click", () => {
-      state.detail = null;
-      render();
+    root.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        const [entityId, recordId] = event.currentTarget.dataset.edit.split(":");
+        state.drawer = {
+          purpose: "edit",
+          entityId,
+          recordId,
+          size: DRAWER_SIZE.STANDARD,
+          values: {},
+          errors: {},
+          isDirty: false,
+          previousFocusedElement: document.activeElement
+        };
+        render();
+        root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+      });
     });
 
-    root.querySelector("[data-edit]")?.addEventListener("click", (event) => {
-      const [entityId, recordId] = event.currentTarget.dataset.edit.split(":");
-      state.modal = { entityId, recordId, errors: {} };
-      render();
+    root.querySelectorAll("[data-drawer-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [entityId, recordId] = btn.dataset.drawerEdit.split(":");
+        if (state.drawer) {
+          state.drawer.purpose = "edit";
+          state.drawer.entityId = entityId;
+          state.drawer.recordId = recordId;
+          state.drawer.errors = {};
+          state.drawer.isDirty = false;
+          render();
+          root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-close-drawer]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (state.drawer?.isDirty) {
+          if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
+            return;
+          }
+        }
+        const prev = state.drawer?.previousFocusedElement;
+        state.drawer = null;
+        render();
+        if (prev && typeof prev.focus === "function") prev.focus();
+      });
+    });
+
+    root.querySelectorAll("[data-dismiss-drawer]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          if (state.drawer?.isDirty) {
+            if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
+              return;
+            }
+          }
+          const prev = state.drawer?.previousFocusedElement;
+          state.drawer = null;
+          render();
+          if (prev && typeof prev.focus === "function") prev.focus();
+        }
+      });
+    });
+
+    // Drawer form tracking & atomic submission
+    root.querySelector("#drawer-record-form")?.addEventListener("input", (event) => {
+      if (state.drawer) {
+        state.drawer.isDirty = true;
+        if (!state.drawer.values) state.drawer.values = {};
+        const fieldName = event.target.name;
+        if (fieldName) {
+          state.drawer.values[fieldName] = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+        }
+      }
+    });
+
+    root.querySelector("#drawer-record-form")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const entityId = form.dataset.entity;
+      const recordId = form.dataset.record;
+      const screen = presentationIr.screens.find((s) => s.resource === entityId);
+      const formData = new FormData(form);
+      const values = Object.fromEntries(
+        screen.editor.fields
+          .filter((f) => !f.readOnly && form.elements.namedItem(f.id))
+          .map((f) => [f.id, f.type === "bool" ? formData.has(f.id) : formData.get(f.id) ?? ""])
+      );
+      try {
+        if (runtime) {
+          if (recordId) {
+            runtime.update(entityId, recordId, values);
+            notify(`${screen.singular} updated`);
+          } else {
+            runtime.create(entityId, values);
+            notify(`${screen.singular} created`);
+          }
+        }
+        const prev = state.drawer?.previousFocusedElement;
+        state.drawer = null;
+        render();
+        if (prev && typeof prev.focus === "function") prev.focus();
+      } catch (error) {
+        if (state.drawer) {
+          state.drawer.errors = error.fieldErrors ?? { _form: error.message };
+          state.drawer.values = values;
+        }
+        render();
+      }
+    });
+
+    // Row Action Menu Triggers
+    root.querySelectorAll("[data-row-action-menu]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const [entityId, recordId] = btn.dataset.rowActionMenu.split(":");
+        const screen = presentationIr.screens.find((s) => s.resource === entityId);
+        const record = runtime ? runtime.get(entityId, recordId) : null;
+
+        if (state.openMenu && state.openMenu.id === `row-menu-${entityId}-${recordId}`) {
+          state.openMenu = null;
+          render();
+          return;
+        }
+
+        const items = [];
+        items.push({ id: `view:${entityId}:${recordId}`, label: "View details", icon: "collection" });
+
+        const canEdit = runtime ? runtime.can(entityId, "edit", record) && runtime.editableFields(entityId, record).length > 0 : true;
+        if (canEdit) {
+          items.push({ id: `edit:${entityId}:${recordId}`, label: "Edit", icon: "edit" });
+        }
+
+        if (runtime && recordId) {
+          const availActions = runtime.availableActions(entityId, recordId);
+          for (const act of availActions) {
+            items.push({ id: `transition:${entityId}:${recordId}:${act.action}:${act.comment ?? "none"}`, label: act.label, icon: "spark" });
+          }
+        }
+
+        const deleteAction = screen?.actions?.find((a) => a.intent === "delete" || a.intent === "archive");
+        const canDelete = runtime ? runtime.can(entityId, deleteAction?.intent ?? "delete", record) : true;
+        if (canDelete) {
+          items.push({ separator: true });
+          items.push({
+            id: `delete:${entityId}:${recordId}`,
+            label: deleteAction?.label ?? "Delete",
+            icon: "trash",
+            tone: "destructive"
+          });
+        }
+
+        const rect = btn.getBoundingClientRect();
+        const isMobile = state.containerWidth < 640;
+
+        let top = Math.round(rect.bottom + 4);
+        let left = Math.round(rect.right - 180);
+        if (left < 10) left = 10;
+        if (typeof window !== "undefined" && window.innerWidth) {
+          if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+          if (top + 220 > window.innerHeight) top = Math.max(10, rect.top - 200);
+        }
+
+        state.openMenu = {
+          id: `row-menu-${entityId}-${recordId}`,
+          triggerEl: btn,
+          items,
+          isMobileSheet: isMobile,
+          position: { top, left }
+        };
+        render();
+
+        const menuPanel = root.querySelector("[data-menu-panel]");
+        menuPanel?.querySelector('[role="menuitem"]')?.focus();
+      });
+    });
+
+    root.querySelectorAll("[data-dismiss-menu]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          state.openMenu = null;
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-menu-action]").forEach((itemBtn) => {
+      itemBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const actionId = itemBtn.dataset.menuAction;
+        state.openMenu = null;
+        const parts = actionId.split(":");
+        const verb = parts[0];
+
+        if (verb === "view") {
+          const [, entityId, recordId] = parts;
+          state.drawer = {
+            purpose: "detail",
+            entityId,
+            recordId,
+            size: DRAWER_SIZE.STANDARD,
+            values: {},
+            errors: {},
+            isDirty: false,
+            previousFocusedElement: document.activeElement
+          };
+          render();
+        } else if (verb === "edit") {
+          const [, entityId, recordId] = parts;
+          state.drawer = {
+            purpose: "edit",
+            entityId,
+            recordId,
+            size: DRAWER_SIZE.STANDARD,
+            values: {},
+            errors: {},
+            isDirty: false,
+            previousFocusedElement: document.activeElement
+          };
+          render();
+        } else if (verb === "delete") {
+          const [, entityId, recordId] = parts;
+          state.confirm = { entityId, recordId };
+          render();
+        } else if (verb === "transition") {
+          const [, entityId, recordId, transAction, commentReq] = parts;
+          let comment = "";
+          if (commentReq !== "none") {
+            const response = prompt(commentReq === "required" ? "Comment required" : "Optional comment");
+            if (response == null) return;
+            comment = response;
+          }
+          try {
+            if (runtime) runtime.transition(entityId, recordId, transAction, { comment });
+            render();
+            notify("Workflow updated");
+          } catch (error) {
+            notify(error.message, "danger");
+          }
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-open-filters]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const screen = currentScreen();
+        if (screen) {
+          state.drawer = {
+            purpose: "filter",
+            entityId: screen.resource,
+            size: DRAWER_SIZE.COMPACT,
+            isDirty: false,
+            previousFocusedElement: document.activeElement
+          };
+          render();
+        }
+      });
+    });
+
+    root.querySelector("[data-filter-search]")?.addEventListener("input", (event) => {
+      const screen = currentScreen();
+      if (screen?.collection) {
+        const q = queryState(screen);
+        q.search = event.target.value;
+        q.page = 1;
+        render();
+      }
+    });
+
+    root.querySelectorAll("[data-filter-select]").forEach((sel) => {
+      sel.addEventListener("change", (event) => {
+        const screen = currentScreen();
+        if (screen?.collection) {
+          const q = queryState(screen);
+          q.filters[event.target.dataset.filterSelect] = event.target.value;
+          q.page = 1;
+          render();
+        }
+      });
+    });
+
+    root.querySelector("[data-filter-clear]")?.addEventListener("click", () => {
+      const screen = currentScreen();
+      if (screen?.collection) {
+        const q = queryState(screen);
+        q.search = "";
+        Object.keys(q.filters).forEach((k) => { q.filters[k] = ""; });
+        q.page = 1;
+        render();
+      }
     });
 
     root.querySelectorAll("[data-transition]").forEach((control) => control.addEventListener("click", () => {
@@ -1444,7 +2067,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         comment = response;
       }
       try {
-        if (runtime) runtime.transition(state.detail.entityId, state.detail.recordId, control.dataset.transition, { comment });
+        if (runtime) runtime.transition(state.drawer?.entityId ?? state.detail?.entityId, state.drawer?.recordId ?? state.detail?.recordId, control.dataset.transition, { comment });
         render();
         notify("Workflow updated");
       } catch (error) {
@@ -1452,10 +2075,12 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       }
     }));
 
-    root.querySelector("[data-delete]")?.addEventListener("click", (event) => {
-      const [entityId, recordId] = event.currentTarget.dataset.delete.split(":");
-      state.confirm = { entityId, recordId };
-      render();
+    root.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        const [entityId, recordId] = event.currentTarget.dataset.delete.split(":");
+        state.confirm = { entityId, recordId };
+        render();
+      });
     });
 
     root.querySelector("[data-cancel-delete]")?.addEventListener("click", () => {
@@ -1474,6 +2099,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         }
         state.confirm = null;
         state.detail = null;
+        state.drawer = null;
         render();
         notify(`${screen.singular} ${isArchive ? "archived" : "deleted"}`);
       } catch (error) {
@@ -1492,6 +2118,78 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       state.modal = null;
       render();
     });
+
+    // Focus trap and keyboard listeners
+    root.onkeydown = (event) => {
+      if (event.key === "Escape") {
+        if (state.openMenu) {
+          state.openMenu = null;
+          render();
+          return;
+        }
+        if (state.drawer) {
+          if (state.drawer.isDirty) {
+            if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
+              return;
+            }
+          }
+          const prev = state.drawer.previousFocusedElement;
+          state.drawer = null;
+          render();
+          if (prev && typeof prev.focus === "function") prev.focus();
+          return;
+        }
+        if (state.modal) {
+          state.modal = null;
+          render();
+          return;
+        }
+      }
+
+      if (event.key === "Tab" && state.drawer) {
+        const drawerPanel = root.querySelector("[data-drawer-panel]");
+        if (drawerPanel) {
+          const focusables = Array.from(drawerPanel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+          if (focusables.length > 0) {
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (event.shiftKey) {
+              if (document.activeElement === first || !drawerPanel.contains(document.activeElement)) {
+                event.preventDefault();
+                last.focus();
+              }
+            } else {
+              if (document.activeElement === last || !drawerPanel.contains(document.activeElement)) {
+                event.preventDefault();
+                first.focus();
+              }
+            }
+          }
+        }
+      }
+
+      if (state.openMenu && (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End")) {
+        const menuPanel = root.querySelector("[data-menu-panel]");
+        if (menuPanel) {
+          const items = Array.from(menuPanel.querySelectorAll('[role="menuitem"]:not([disabled])'));
+          if (items.length > 0) {
+            event.preventDefault();
+            const currentIndex = items.indexOf(document.activeElement);
+            if (event.key === "Home") {
+              items[0].focus();
+            } else if (event.key === "End") {
+              items[items.length - 1].focus();
+            } else if (event.key === "ArrowDown") {
+              const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+              items[nextIndex].focus();
+            } else if (event.key === "ArrowUp") {
+              const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+              items[prevIndex].focus();
+            }
+          }
+        }
+      }
+    };
 
     // 1. Auth Login Form Submission
     root.querySelector("#auth-login-form")?.addEventListener("submit", async (event) => {
@@ -1752,6 +2450,27 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     root.querySelector("[data-mobile-nav-toggle]")?.addEventListener("click", () => {
       state.mobileMenuOpen = !state.mobileMenuOpen;
       render();
+    });
+
+    // Data Visualization View Toggle (Chart vs Exact Accessible Data Table)
+    root.querySelectorAll("[data-viz-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const vizId = btn.dataset.vizToggle;
+        const stage = root.querySelector(`#viz-stage-${vizId}`);
+        const table = root.querySelector(`#viz-table-${vizId}`);
+        if (stage && table) {
+          const isTableVisible = !table.classList.contains("hidden");
+          if (isTableVisible) {
+            table.classList.add("hidden");
+            stage.classList.remove("hidden");
+            btn.setAttribute("aria-expanded", "false");
+          } else {
+            table.classList.remove("hidden");
+            stage.classList.add("hidden");
+            btn.setAttribute("aria-expanded", "true");
+          }
+        }
+      });
     });
 
     root.querySelectorAll("[data-close-mobile-nav]").forEach((link) => {

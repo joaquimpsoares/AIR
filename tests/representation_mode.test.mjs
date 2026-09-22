@@ -11,12 +11,22 @@ import {
   HERO_REPRESENTATION,
   WORKFLOW_REPRESENTATION,
   SHELL_REPRESENTATION,
+  FEATURE_STORY_REPRESENTATION,
+  DASHBOARD_REPRESENTATION,
+  PROOF_REPRESENTATION,
+  PRICING_REPRESENTATION,
+  PRODUCT_STORY_REPRESENTATION,
   resolveCollectionArtifactLayout,
   resolveFormArtifactLayout,
   resolveNavigationArtifactLayout,
   resolveHeroArtifactLayout,
   resolveWorkflowArtifactLayout,
-  resolveShellArtifactLayout
+  resolveShellArtifactLayout,
+  resolveFeatureStorySectionLayout,
+  resolveSocialProofSectionLayout,
+  resolvePricingSectionLayout,
+  resolveDashboardSectionLayout,
+  resolveProductStorySectionLayout
 } from "../web/runtime/ui_hierarchy.mjs";
 import { renderPresentation } from "../web/runtime/ui.mjs";
 
@@ -160,4 +170,56 @@ test("PART 6: Source-Level CSS Audit: Zero Behavioral Media Query Decisions", as
 
   // 3. Behavioral form-grid columns must not be controlled by media queries
   assert.ok(!css.includes(".form-grid { grid-template-columns: 1fr; padding: 18px; }"), "CSS media query must NOT decide form column representation");
+});
+
+test("PART 7: Section Representation Enums & Layout Resolvers", () => {
+  // Feature Story layout resolver
+  assert.equal(resolveFeatureStorySectionLayout(1200).representation, "asymmetric_bento");
+  assert.equal(resolveFeatureStorySectionLayout(800).representation, "balanced_grid");
+  assert.equal(resolveFeatureStorySectionLayout(390).representation, "narrative_stack");
+
+  // Social Proof layout resolver
+  assert.equal(resolveSocialProofSectionLayout(1200).representation, "proof_band");
+  assert.equal(resolveSocialProofSectionLayout(500).representation, "proof_stack");
+
+  // Pricing layout resolver
+  assert.equal(resolvePricingSectionLayout(1200).representation, "comparison_grid");
+  assert.equal(resolvePricingSectionLayout(500).representation, "sequential_plans");
+
+  // Dashboard layout resolver
+  assert.equal(resolveDashboardSectionLayout(1200).representation, "dashboard_grid");
+  assert.equal(resolveDashboardSectionLayout(800).representation, "dashboard_condensed");
+  assert.equal(resolveDashboardSectionLayout(500).representation, "dashboard_stack");
+});
+
+test("PART 8: Product Launch Landing Recomposition: Wide (Asymmetric Bento) vs Mobile 390px (Narrative Stack)", async () => {
+  const source = await readFile("apps/landing-demo.air", "utf8");
+  const model = parseAir(source);
+  const presentationIr = compilePresentation(model);
+  const visualDesignIr = compileVisualDesign(presentationIr);
+
+  // 1. Wide Desktop (1440px)
+  const rootDesktop = { innerHTML: "", removeAttribute: () => {}, querySelector: () => null, querySelectorAll: () => [] };
+  renderPresentation(rootDesktop, presentationIr, null, { initialScreen: "landing", containerWidth: 1440 });
+
+  assert.ok(rootDesktop.innerHTML.includes('data-section-representation="asymmetric_bento"'), "Desktop feature section must be asymmetric_bento");
+  assert.ok(rootDesktop.innerHTML.includes('class="feature-grid bento-grid"'), "Desktop must render bento-grid");
+  assert.ok(rootDesktop.innerHTML.includes('data-hero-representation="split"'), "Desktop hero must be split");
+  assert.ok(rootDesktop.innerHTML.includes('data-shell-representation="public"'), "Desktop shell must be public");
+  assert.ok(rootDesktop.innerHTML.includes('data-section-representation="proof_band"'), "Desktop proof must be proof_band");
+  assert.ok(rootDesktop.innerHTML.includes('data-section-representation="comparison_grid"'), "Desktop pricing must be comparison_grid");
+
+  // 2. Mobile (390px)
+  const rootMobile = { innerHTML: "", removeAttribute: () => {}, querySelector: () => null, querySelectorAll: () => [] };
+  renderPresentation(rootMobile, presentationIr, null, { initialScreen: "landing", containerWidth: 390 });
+
+  assert.ok(rootMobile.innerHTML.includes('data-section-representation="narrative_stack"'), "Mobile feature section must be narrative_stack");
+  assert.ok(rootMobile.innerHTML.includes('class="feature-grid narrative-stack"'), "Mobile must render narrative-stack");
+  assert.ok(rootMobile.innerHTML.includes('stacked-card'), "Mobile cards must have stacked-card class");
+  assert.ok(rootMobile.innerHTML.includes('stacked-metrics'), "Mobile dominant card must render stacked-metrics unclipped");
+  assert.ok(rootMobile.innerHTML.includes('data-hero-representation="stacked"'), "Mobile hero must be stacked");
+  assert.ok(rootMobile.innerHTML.includes('data-shell-representation="public_compact"'), "Mobile shell must be public_compact");
+  assert.ok(rootMobile.innerHTML.includes('data-section-representation="proof_stack"'), "Mobile proof must be proof_stack");
+  assert.ok(rootMobile.innerHTML.includes('data-section-representation="sequential_plans"'), "Mobile pricing must be sequential_plans");
+  assert.ok(!rootMobile.innerHTML.includes('class="feature-grid bento-grid"'), "Mobile MUST NOT render desktop bento-grid");
 });

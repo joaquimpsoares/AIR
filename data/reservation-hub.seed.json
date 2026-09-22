@@ -1,0 +1,197 @@
+{
+  "locations": [
+    {
+      "id": "loc_madrid",
+      "name": "Madrid Innovation Hub",
+      "timezone": "Europe/Madrid",
+      "status": "Active"
+    },
+    {
+      "id": "loc_nyc",
+      "name": "New York Tech Center",
+      "timezone": "America/New_York",
+      "status": "Active"
+    },
+    {
+      "id": "loc_london",
+      "name": "London Operations Campus",
+      "timezone": "Europe/London",
+      "status": "Active"
+    }
+  ],
+  "resources": [
+    {
+      "id": "res_boardroom",
+      "name": "Executive Boardroom",
+      "location": "loc_madrid",
+      "type": "MeetingRoom",
+      "capacity": 16,
+      "status": "Available",
+      "hourly_rate": 150
+    },
+    {
+      "id": "res_podcast",
+      "name": "Acoustic Podcast Studio",
+      "location": "loc_madrid",
+      "type": "Studio",
+      "capacity": 4,
+      "status": "Available",
+      "hourly_rate": 80
+    },
+    {
+      "id": "res_training_hall",
+      "name": "Grand Training Hall",
+      "location": "loc_nyc",
+      "type": "TrainingHall",
+      "capacity": 50,
+      "status": "Available",
+      "hourly_rate": 300
+    },
+    {
+      "id": "res_desk_cluster",
+      "name": "Dedicated Desk Cluster A",
+      "location": "loc_nyc",
+      "type": "Desk",
+      "capacity": 6,
+      "status": "Available",
+      "hourly_rate": 40
+    },
+    {
+      "id": "res_vr_kit",
+      "name": "Enterprise Spatial VR Suite",
+      "location": "loc_london",
+      "type": "Equipment",
+      "capacity": 2,
+      "status": "Available",
+      "hourly_rate": 100
+    }
+  ],
+  "customers": [
+    {
+      "id": "cust_acme",
+      "name": "Acme Global Ventures",
+      "email": "booking@acmeglobal.com",
+      "status": "Active",
+      "joined_date": "2026-01-10"
+    },
+    {
+      "id": "cust_globex",
+      "name": "Globex Robotics",
+      "email": "ops@globex.org",
+      "status": "Active",
+      "joined_date": "2026-02-15"
+    },
+    {
+      "id": "cust_soylent",
+      "name": "Soylent Media Labs",
+      "email": "events@soylent.media",
+      "status": "Active",
+      "joined_date": "2026-03-01"
+    },
+    {
+      "id": "cust_initech",
+      "name": "Initech Cloud Solutions",
+      "email": "admin@initech.io",
+      "status": "Active",
+      "joined_date": "2026-04-12"
+    }
+  ],
+  "reservations": [
+    {
+      "id": "resv_01",
+      "title": "Quarterly Executive Strategy Review",
+      "customer": "cust_acme",
+      "resource": "res_boardroom",
+      "start_at": "2026-09-24",
+      "end_at": "2026-09-24",
+      "attendees": 12,
+      "status": "Confirmed",
+      "amount": 600,
+      "created_at": "2026-09-15",
+      "updated": "2026-09-16"
+    },
+    {
+      "id": "resv_02",
+      "title": "AI Product Launch Keynote Podcast",
+      "customer": "cust_soylent",
+      "resource": "res_podcast",
+      "start_at": "2026-09-25",
+      "end_at": "2026-09-25",
+      "attendees": 3,
+      "status": "Confirmed",
+      "amount": 240,
+      "created_at": "2026-09-18",
+      "updated": "2026-09-19"
+    },
+    {
+      "id": "resv_03",
+      "title": "Full-Day Engineering Architecture Workshop",
+      "customer": "cust_globex",
+      "resource": "res_training_hall",
+      "start_at": "2026-09-28",
+      "end_at": "2026-09-29",
+      "attendees": 40,
+      "status": "Requested",
+      "amount": 2400,
+      "created_at": "2026-09-20",
+      "updated": "2026-09-20"
+    },
+    {
+      "id": "resv_04",
+      "title": "Spatial Simulation Testing Run",
+      "customer": "cust_initech",
+      "resource": "res_vr_kit",
+      "start_at": "2026-09-10",
+      "end_at": "2026-09-10",
+      "attendees": 2,
+      "status": "Completed",
+      "amount": 300,
+      "created_at": "2026-09-01",
+      "updated": "2026-09-10"
+    },
+    {
+      "id": "resv_05",
+      "title": "Sprint Planning Session Alpha",
+      "customer": "cust_acme",
+      "resource": "res_desk_cluster",
+      "start_at": "2026-09-18",
+      "end_at": "2026-09-18",
+      "attendees": 6,
+      "status": "Cancelled",
+      "amount": 160,
+      "created_at": "2026-09-05",
+      "updated": "2026-09-17"
+    },
+    {
+      "id": "resv_06",
+      "title": "On-Demand Standup Meeting",
+      "customer": "cust_soylent",
+      "resource": "res_boardroom",
+      "start_at": "2026-09-22",
+      "end_at": "2026-09-22",
+      "attendees": 8,
+      "status": "CheckedIn",
+      "amount": 300,
+      "created_at": "2026-09-21",
+      "updated": "2026-09-22"
+    }
+  ],
+  "blackouts": [
+    {
+      "id": "blk_01",
+      "resource": "res_training_hall",
+      "reason": "HVAC Central Duct Maintenance & Acoustic Refit",
+      "start_at": "2026-10-01",
+      "end_at": "2026-10-05",
+      "status": "Active"
+    },
+    {
+      "id": "blk_02",
+      "resource": "res_podcast",
+      "reason": "Microphone Array Calibration & Studio Shielding",
+      "start_at": "2026-09-01",
+      "end_at": "2026-09-03",
+      "status": "Resolved"
+    }
+  ]
+}

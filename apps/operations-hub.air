@@ -1,0 +1,75 @@
+air version=2
+app operations_hub title="Operations Hub" subtitle="Mission-critical delivery, workflows, and resource telemetry" initial=overview timezone="Europe/Madrid"
+theme mode=dark accent=violet
+capability storage.local
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.plan enum values=Starter,Professional,Enterprise required default=Professional
+field customers.mrr money currency=USD required default=0
+field customers.status enum values=Active,Inactive required default=Active
+field customers.joined_date date required default=today
+manage customers lifecycle=archive
+access customers view=role:admin|role:operator edit=role:admin|role:operator
+
+resource projects label=name
+field projects.name text required min=2
+field projects.customer ref=customers required
+field projects.owner text required
+field projects.budget money currency=USD required default=10000
+field projects.status enum values=Planned,Active,Blocked,Completed,Archived required default=Planned
+field projects.created_date date required default=today
+field projects.target_date date required
+field projects.updated date required default=today
+manage projects delete=false
+access projects view=role:admin|role:operator edit=role:admin|role:operator
+process projects state=status initial=Planned terminal=Archived history touch=updated
+transition projects.activate from=Planned to=Active action=activate by=role:operator event=activated
+transition projects.block from=Active to=Blocked action=block by=role:operator comment=required event=blocked
+transition projects.unblock from=Blocked to=Active action=unblock by=role:operator event=unblocked
+transition projects.complete from=Active to=Completed action=complete by=role:operator event=completed
+transition projects.archive from=Completed to=Archived action=archive by=role:admin event=archived
+transition projects.cancel from=Planned to=Archived action=cancel by=role:admin event=cancelled
+
+resource tasks label=title
+field tasks.title text required min=2
+field tasks.project ref=projects required
+field tasks.priority enum values=Low,Medium,High,Urgent required default=Medium
+field tasks.status enum values=Todo,InProgress,Review,Done required default=Todo
+field tasks.due_date date required default=today
+field tasks.assignee text required
+field tasks.estimated_hours number required default=8
+manage tasks lifecycle=delete
+access tasks view=role:admin|role:operator edit=role:admin|role:operator
+highlight tasks.overdue when="due_date<today&status!=Done" tone=danger
+
+resource service_requests label=title
+field service_requests.title text required min=2
+field service_requests.customer ref=customers required
+field service_requests.severity enum values=Low,Medium,High,Critical required default=Medium
+field service_requests.status enum values=Open,Triaged,InProgress,Resolved,Closed required default=Open
+field service_requests.created_at date required default=today
+field service_requests.resolved_at date
+field service_requests.updated date required default=today
+manage service_requests delete=false
+access service_requests view=role:admin|role:operator edit=role:admin|role:operator
+process service_requests state=status initial=Open terminal=Closed history touch=updated
+transition service_requests.triage from=Open to=Triaged action=triage by=role:operator event=triaged
+transition service_requests.start_work from=Triaged to=InProgress action=start_work by=role:operator event=in_progress
+transition service_requests.resolve from=InProgress to=Resolved action=resolve by=role:operator comment=required event=resolved
+transition service_requests.close from=Resolved to=Closed action=close by=role:operator event=closed
+transition service_requests.reopen from=Resolved to=InProgress action=reopen by=role:operator event=reopened
+
+overview title="Global Operations Dashboard"
+insight customers.total_mrr op=sum field=mrr label="Total MRR"
+insight projects.active_count op=count where=status:Active label="Active Projects"
+insight tasks.urgent_count op=count where=priority:Urgent label="Urgent Tasks"
+insight service_requests.critical_count op=count where=severity:Critical label="Critical Issues"
+insight projects.by_status op=count group=status label="Projects by Status"
+insight tasks.status_dist op=count group=status label="Task Distribution"
+insight service_requests.severity_breakdown op=count group=severity label="Request Severity Breakdown"
+insight customers.mrr_by_plan op=sum group=plan field=mrr label="Revenue by Plan"
+insight projects.completion_trend op=count source=events.projects where="to==Completed" label="Project Completion Trend"
+insight service_requests.mttr op=avg source=events.service_requests from=Open to=Resolved label="Mean Time to Resolution"
+

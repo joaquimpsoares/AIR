@@ -1,0 +1,250 @@
+{
+  "customers": [
+    {
+      "id": "cust_acme",
+      "name": "Acme Corp",
+      "email": "contact@acme.corp",
+      "plan": "Enterprise",
+      "mrr": 12500,
+      "status": "Active",
+      "joined_date": "2026-01-15"
+    },
+    {
+      "id": "cust_globex",
+      "name": "Globex International",
+      "email": "ops@globex.com",
+      "plan": "Enterprise",
+      "mrr": 9800,
+      "status": "Active",
+      "joined_date": "2026-02-01"
+    },
+    {
+      "id": "cust_soylent",
+      "name": "Soylent Tech",
+      "email": "support@soylent.io",
+      "plan": "Professional",
+      "mrr": 3400,
+      "status": "Active",
+      "joined_date": "2026-03-10"
+    },
+    {
+      "id": "cust_initech",
+      "name": "Initech Systems",
+      "email": "peter@initech.net",
+      "plan": "Professional",
+      "mrr": 2900,
+      "status": "Active",
+      "joined_date": "2026-04-18"
+    },
+    {
+      "id": "cust_umbrella",
+      "name": "Umbrella Health",
+      "email": "lab@umbrella.med",
+      "plan": "Professional",
+      "mrr": 4200,
+      "status": "Active",
+      "joined_date": "2026-05-22"
+    },
+    {
+      "id": "cust_hooli",
+      "name": "Hooli Cloud",
+      "email": "admin@hooli.xyz",
+      "plan": "Starter",
+      "mrr": 750,
+      "status": "Inactive",
+      "joined_date": "2026-06-05"
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj_infra_migration",
+      "name": "Cloud Infrastructure Migration",
+      "customer": "cust_acme",
+      "owner": "Alex Mercer",
+      "budget": 45000,
+      "status": "Active",
+      "created_date": "2026-05-01",
+      "target_date": "2026-11-30",
+      "updated": "2026-09-15"
+    },
+    {
+      "id": "proj_security_audit",
+      "name": "SOC2 Compliance & Zero-Trust Audit",
+      "customer": "cust_globex",
+      "owner": "Diana Prince",
+      "budget": 28000,
+      "status": "Active",
+      "created_date": "2026-06-10",
+      "target_date": "2026-10-15",
+      "updated": "2026-09-18"
+    },
+    {
+      "id": "proj_data_pipeline",
+      "name": "Real-time Telemetry Pipeline",
+      "customer": "cust_soylent",
+      "owner": "Marcus Vance",
+      "budget": 35000,
+      "status": "Blocked",
+      "created_date": "2026-07-01",
+      "target_date": "2026-12-15",
+      "updated": "2026-09-20"
+    },
+    {
+      "id": "proj_billing_engine",
+      "name": "Automated Billing & Invoicing Engine",
+      "customer": "cust_initech",
+      "owner": "Samantha Reed",
+      "budget": 18000,
+      "status": "Planned",
+      "created_date": "2026-08-15",
+      "target_date": "2026-12-31",
+      "updated": "2026-08-15"
+    },
+    {
+      "id": "proj_portal_redesign",
+      "name": "Customer Self-Service Portal",
+      "customer": "cust_umbrella",
+      "owner": "Elena Rostova",
+      "budget": 22000,
+      "status": "Completed",
+      "created_date": "2026-03-01",
+      "target_date": "2026-08-01",
+      "updated": "2026-08-02"
+    },
+    {
+      "id": "proj_legacy_decom",
+      "name": "Legacy Mainframe Decommissioning",
+      "customer": "cust_acme",
+      "owner": "Alex Mercer",
+      "budget": 15000,
+      "status": "Archived",
+      "created_date": "2026-01-20",
+      "target_date": "2026-04-30",
+      "updated": "2026-05-01"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task_101",
+      "title": "Configure VPC Peering & Firewall Rules",
+      "project": "proj_infra_migration",
+      "priority": "High",
+      "status": "Done",
+      "due_date": "2026-08-10",
+      "assignee": "Alex Mercer",
+      "estimated_hours": 16
+    },
+    {
+      "id": "task_102",
+      "title": "Migrate Primary Postgres Database Cluster",
+      "project": "proj_infra_migration",
+      "priority": "Urgent",
+      "status": "InProgress",
+      "due_date": "2026-09-25",
+      "assignee": "Alex Mercer",
+      "estimated_hours": 32
+    },
+    {
+      "id": "task_103",
+      "title": "Conduct IAM Role Privilege Escalation Testing",
+      "project": "proj_security_audit",
+      "priority": "High",
+      "status": "InProgress",
+      "due_date": "2026-09-30",
+      "assignee": "Diana Prince",
+      "estimated_hours": 20
+    },
+    {
+      "id": "task_104",
+      "title": "Generate Penetration Test Evidence Report",
+      "project": "proj_security_audit",
+      "priority": "Medium",
+      "status": "Todo",
+      "due_date": "2026-10-10",
+      "assignee": "Diana Prince",
+      "estimated_hours": 12
+    },
+    {
+      "id": "task_105",
+      "title": "Resolve Kafka Cluster Partition Bottleneck",
+      "project": "proj_data_pipeline",
+      "priority": "Urgent",
+      "status": "Todo",
+      "due_date": "2026-09-22",
+      "assignee": "Marcus Vance",
+      "estimated_hours": 24
+    },
+    {
+      "id": "task_106",
+      "title": "Draft Architecture Review Document for Billing",
+      "project": "proj_billing_engine",
+      "priority": "Low",
+      "status": "Review",
+      "due_date": "2026-10-01",
+      "assignee": "Samantha Reed",
+      "estimated_hours": 8
+    },
+    {
+      "id": "task_107",
+      "title": "Deploy Portal Production Release v2.4",
+      "project": "proj_portal_redesign",
+      "priority": "High",
+      "status": "Done",
+      "due_date": "2026-07-28",
+      "assignee": "Elena Rostova",
+      "estimated_hours": 14
+    }
+  ],
+  "service_requests": [
+    {
+      "id": "sr_301",
+      "title": "Production API Rate Limiter False Positives",
+      "customer": "cust_acme",
+      "severity": "Critical",
+      "status": "InProgress",
+      "created_at": "2026-09-21",
+      "resolved_at": null,
+      "updated": "2026-09-22"
+    },
+    {
+      "id": "sr_302",
+      "title": "SSO SAML Assertion Signature Mismatch",
+      "customer": "cust_globex",
+      "severity": "High",
+      "status": "Triaged",
+      "created_at": "2026-09-20",
+      "resolved_at": null,
+      "updated": "2026-09-21"
+    },
+    {
+      "id": "sr_303",
+      "title": "Webhook Delivery Latency Spikes during Peak",
+      "customer": "cust_soylent",
+      "severity": "Medium",
+      "status": "Open",
+      "created_at": "2026-09-22",
+      "resolved_at": null,
+      "updated": "2026-09-22"
+    },
+    {
+      "id": "sr_304",
+      "title": "Update Billing Contact and Tax Exemption Certificate",
+      "customer": "cust_initech",
+      "severity": "Low",
+      "status": "Resolved",
+      "created_at": "2026-09-10",
+      "resolved_at": "2026-09-12",
+      "updated": "2026-09-12"
+    },
+    {
+      "id": "sr_305",
+      "title": "Export Audit Logs for Compliance Q3",
+      "customer": "cust_umbrella",
+      "severity": "Medium",
+      "status": "Closed",
+      "created_at": "2026-08-25",
+      "resolved_at": "2026-08-26",
+      "updated": "2026-08-26"
+    }
+  ]
+}

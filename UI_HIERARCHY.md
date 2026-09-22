@@ -62,11 +62,16 @@ Implemented in [`web/runtime/ui_hierarchy.mjs`](file:///home/projects/aircode/we
 - `faq`: Accessible collapsible accordion knowledge base.
 - `cta`: High-contrast conversion banner.
 - `detail`: Single-record profile and relational inspector.
+- `data_story`: Visual analytical storytelling composing multi-series charts and exact data tables.
 
 ### 2.3 UI Artifacts Catalog (`UI_ARTIFACTS`)
 - `collection`: Adaptive table/card list with container-query driven recomposition.
 - `form`: Schema-driven input collector with responsive multi-to-single column flow.
 - `navigation`: Adaptive header/sidebar with accessible mobile slide-down drawer.
+- `drawer`: Secondary interaction surface rendering as a right-side slide-over panel on desktop and full-screen sheet on mobile. Supports `edit`, `create`, `detail`, `filter`, and `workflow` purposes with focus trapping and dirty-state confirmation guards.
+- `menu`: Contextual popover, dropdown, or mobile action sheet supporting row-level actions (`[⋮]`), authority filtering, destructive styling, and arrow-key keyboard navigation.
+- `data_visualization`: Intent-driven visual data chart (`line`, `area`, `bar`, `stacked_bar`, `scatter`, `sparkline`) with dual accessible exact data table.
+- `semantic_graph`: State machine DAG and immutable timeline visualization.
 - `workflow_inbox`: Actionable queue with two-key guard and authority verification.
 - `metric`: Numerical callout with typographic scaling.
 - `modal`: Overlay surface rendering as centered dialog on desktop and bottom sheet on mobile.
@@ -84,6 +89,10 @@ AIR rejects desktop-first squeezing in favor of semantic recomposition driven by
 
 | Artifact / Section | Container / Viewport Width | Rendered Mode | Recomposition Behavior |
 | :--- | :--- | :--- | :--- |
+| **Drawer (`drawer`)** | $\ge 640\text{px}$ | `RIGHT_DRAWER` / `WIDE_SHEET` | Right-side sliding drawer panel (compact 380px, standard 480px, wide 640px) |
+| **Drawer (`drawer`)** | $< 640\text{px}$ | `FULL_SCREEN_SHEET` | Full-screen sliding sheet with sticky header and footer controls |
+| **Menu (`menu`)** | $\ge 640\text{px}$ | `DROPDOWN` / `TOP_POPOVER` | Floating anchored popover with collision check & flip logic |
+| **Menu (`menu`)** | $< 640\text{px}$ | `COMPACT_SHEET` | Bottom-anchored action sheet overlay |
 | **Collection (Table/List)** | $\ge 640\text{px}$ | Multi-Column Table | Full headers, all primary columns, inline actions |
 | **Collection (Table/List)** | $480\text{px} - 639\text{px}$ | Condensed Table | Metadata fields collapsed, primary & secondary columns visible |
 | **Collection (Table/List)** | $< 480\text{px}$ | Semantic Card List | Recomposed to cards with label/value rows, status badge, dropdown actions |

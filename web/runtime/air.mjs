@@ -19,7 +19,7 @@ export {
   applyVisualDesignPatch,
   serializeVisualDesignIr
 } from "./visual_design.mjs";
-export { FAILURE_CATEGORIES, AdapterError, SchemaMapping, validateIdentifier, DataAdapter, MemoryDataAdapter, SqliteDataAdapter, PostgresDataAdapter } from "./data.mjs";
+export { FAILURE_CATEGORIES, AdapterError, SchemaMapping, validateIdentifier, AsyncMutex, DataAdapter, MemoryDataAdapter, SqliteDataAdapter, PostgresDataAdapter } from "./data.mjs";
 export { EventEnvelope, ConnectorManifest, Connector, RestConnectorAdapter, McpConnectorAdapter, ConnectorRegistry } from "./connector.mjs";
 export {
   SECURITY_ERROR_CODES,
@@ -107,13 +107,11 @@ export {
 
 import { FIELD_CLASSIFICATIONS, globalRedactor } from "./security.mjs";
 import { OPERATIONAL_ERROR_CODES, OperationalError, FAILURE_CLASSIFICATIONS } from "./operations.mjs";
-
-
-
+import { FAILURE_CATEGORIES, AsyncMutex } from "./data.mjs";
 
 const DECLARATION_KEYS = Object.freeze({
   air: new Set(["version"]),
-  app: new Set(["title", "subtitle", "initial"]),
+  app: new Set(["title", "subtitle", "initial", "timezone"]),
   theme: new Set(["mode", "accent", "density"]),
   design: new Set(["archetype", "character", "rhythm", "motion", "density", "contrast", "accent"]),
   capability: new Set(),
@@ -121,12 +119,13 @@ const DECLARATION_KEYS = Object.freeze({
   actor: new Set(),
   field: new Set([
     "type", "label", "required", "unique", "values", "ref", "default",
-    "min", "placeholder", "long", "currency"
+    "min", "placeholder", "long", "currency", "start", "end", "policy",
+    "computed", "unit", "rate"
   ]),
   manage: new Set(["create", "edit", "delete", "lifecycle", "page_size"]),
   access: new Set(["view", "create", "edit", "delete", "archive"]),
   overview: new Set(["title"]),
-  insight: new Set(["op", "field", "source", "group", "where", "window", "date", "label", "tone"]),
+  insight: new Set(["op", "field", "source", "group", "where", "window", "date", "label", "tone", "from", "to", "format", "overlaps"]),
   rule: new Set(["field", "from", "to", "after", "since"]),
   highlight: new Set(["when", "tone"]),
   parameter: new Set(["value", "label"]),
@@ -135,7 +134,7 @@ const DECLARATION_KEYS = Object.freeze({
     "from", "to", "action", "by", "when", "automatic", "comment",
     "approvals", "distinct", "separate", "event", "within", "since", "unless_event"
   ]),
-  invariant: new Set(["when", "require", "immutable"]),
+  invariant: new Set(["when", "require", "immutable", "none", "exists", "scope", "overlaps", "deny", "where"]),
   deadline: new Set(["state", "after", "escalation"]),
   extension: new Set(["module", "slot"]),
   experience: new Set([
@@ -153,10 +152,11 @@ const ID_KINDS = new Set([
   "invariant", "deadline", "extension", "experience"
 ]);
 const SINGLETON_KINDS = new Set(["air", "theme", "design", "overview"]);
-const FIELD_TYPES = new Set(["text", "email", "phone", "enum", "date", "ref", "number", "money", "bool"]);
+const FIELD_TYPES = new Set(["text", "email", "phone", "enum", "date", "datetime", "ref", "number", "money", "rate", "bool", "interval", "duration"]);
 const SEARCHABLE_TYPES = new Set(["text", "email", "phone"]);
 const FILTERABLE_TYPES = new Set(["enum", "ref", "bool"]);
-const NUMERIC_TYPES = new Set(["number", "money"]);
+const NUMERIC_TYPES = new Set(["number", "money", "rate"]);
+const RATE_UNITS = new Set(["s", "m", "h", "d"]);
 const ACCENTS = new Set(["violet", "blue", "emerald", "rose", "amber"]);
 const MODES = new Set(["light", "dark", "system"]);
 const DENSITIES = new Set(["compact", "comfortable"]);
@@ -508,10 +508,318 @@ function overviewPage(declaration, managed) {
   return page;
 }
 
+export function parseMoneyToMinorUnits(value) {
+  if (value == null) return null;
+  if (typeof value === "bigint") return value;
+  const str = String(value).trim();
+  if (!str) return null;
+  const match = /^(-)?(\d+)(?:\.(\d+))?$/.exec(str);
+  if (!match) return null;
+  const sign = match[1] ? -1n : 1n;
+  const integerPart = match[2];
+  let fractionPart = match[3] || "";
+  if (fractionPart.length === 0) {
+    fractionPart = "00";
+  } else if (fractionPart.length === 1) {
+    fractionPart = fractionPart + "0";
+  } else if (fractionPart.length === 2) {
+    // exact 2 decimals
+  } else {
+    // 3 or more decimals: round half-away-from-zero on 3rd digit
+    const firstTwo = BigInt(fractionPart.slice(0, 2));
+    const thirdDigit = Number(fractionPart[2]);
+    let roundedTwo = firstTwo;
+    if (thirdDigit >= 5) {
+      roundedTwo += 1n;
+    }
+    return (BigInt(integerPart) * 100n + roundedTwo) * sign;
+  }
+  return (BigInt(integerPart) * 100n + BigInt(fractionPart)) * sign;
+}
+
+export class MoneyRate {
+  constructor(amount, currency, unit) {
+    if (amount instanceof MoneyRate) {
+      this.minorUnits = amount.minorUnits;
+      this.currency = amount.currency;
+      this.unit = amount.unit;
+      this.unitMs = amount.unitMs;
+      return;
+    }
+
+    if (typeof amount === "object" && amount !== null && amount.minorUnits !== undefined) {
+      this.minorUnits = BigInt(amount.minorUnits);
+      this.currency = String(amount.currency || currency || "").trim().toUpperCase();
+      this.unit = String(amount.unit || unit || "").trim();
+    } else {
+      const parsedMinor = parseMoneyToMinorUnits(amount);
+      if (parsedMinor === null) {
+        throw new AirError(`invalid monetary rate amount \`${amount}\``);
+      }
+      this.minorUnits = parsedMinor;
+      this.currency = String(currency || "").trim().toUpperCase();
+      this.unit = String(unit || "").trim();
+    }
+
+    if (!this.currency || !/^[A-Z]{3}$/.test(this.currency)) {
+      throw new AirError(`rate requires a valid 3-letter currency code, got \`${this.currency}\``);
+    }
+
+    if (!RATE_UNITS.has(this.unit)) {
+      throw new AirError(`rate unit must be one of s, m, h, d, got \`${this.unit}\``);
+    }
+
+    this.unitMs = this.unit === "s" ? 1000 :
+                  this.unit === "m" ? 60000 :
+                  this.unit === "h" ? 3600000 :
+                  this.unit === "d" ? 86400000 : null;
+
+    if (!this.unitMs) {
+      throw new AirError(`unknown rate denominator unit \`${this.unit}\``);
+    }
+  }
+
+  get amount() {
+    return Number(this.minorUnits) / 100;
+  }
+
+  get rateUnit() { return this.unit; }
+  valueOf() { return this.amount; }
+  toJSON() { return this.amount; }
+  toString() { return `${this.currency} ${this.formatAmount()}/${this.unit}`; }
+
+  formatAmount() {
+    const isNeg = this.minorUnits < 0n;
+    const absVal = isNeg ? -this.minorUnits : this.minorUnits;
+    const intPart = absVal / 100n;
+    const fracPart = absVal % 100n;
+    const fracStr = fracPart === 0n ? "" : `.${String(fracPart).padStart(2, "0").replace(/0+$/, "")}`;
+    return `${isNeg ? "-" : ""}${intPart}${fracStr}`;
+  }
+}
+
+export class Duration {
+  constructor(milliseconds = 0) {
+    this.milliseconds = Math.trunc(Number(milliseconds) || 0);
+  }
+  get ms() { return this.milliseconds; }
+  get seconds() { return Math.trunc(this.milliseconds / 1000); }
+  get minutes() { return Math.trunc(this.milliseconds / 60000); }
+  get hours() { return this.milliseconds / 3600000; }
+  get days() { return this.milliseconds / 86400000; }
+  
+  plus(other) {
+    const otherMs = other instanceof Duration ? other.milliseconds : typeof other === "number" ? other : 0;
+    return new Duration(this.milliseconds + otherMs);
+  }
+  minus(other) {
+    const otherMs = other instanceof Duration ? other.milliseconds : typeof other === "number" ? other : 0;
+    return new Duration(this.milliseconds - otherMs);
+  }
+  valueOf() { return this.milliseconds; }
+  toJSON() { return this.milliseconds; }
+  toISOString() { return `PT${this.milliseconds / 1000}S`; }
+  format(unit = "h") {
+    if (unit === "ms") return `${this.milliseconds}ms`;
+    if (unit === "s") return `${this.seconds}s`;
+    if (unit === "m") return `${this.minutes}m`;
+    if (unit === "d") return `${this.days}d`;
+    return `${this.hours}h`;
+  }
+  toString() {
+    if (this.milliseconds === 0) return "0h";
+    if (this.milliseconds % 86400000 === 0) return `${this.milliseconds / 86400000}d`;
+    if (this.milliseconds % 3600000 === 0) return `${this.milliseconds / 3600000}h`;
+    if (this.milliseconds % 60000 === 0) return `${this.milliseconds / 60000}m`;
+    if (this.milliseconds % 1000 === 0) return `${this.milliseconds / 1000}s`;
+    return `${this.milliseconds}ms`;
+  }
+}
+
+export function roundSymmetricRational(numerator, denominator) {
+  if (denominator === 0 || !Number.isFinite(denominator)) return 0;
+  if (!Number.isFinite(numerator)) return 0;
+  const num = BigInt(Math.trunc(numerator));
+  const den = BigInt(Math.trunc(denominator));
+  if (den === 0n) return 0;
+  const isNeg = (num < 0n) !== (den < 0n);
+  const absNum = num < 0n ? -num : num;
+  const absDen = den < 0n ? -den : den;
+  const rounded = (2n * absNum + absDen) / (2n * absDen);
+  return Number(isNeg ? -rounded : rounded);
+}
+
+export class UtilizationRatio {
+  constructor(numerator = 0, denominator = 1) {
+    if (numerator instanceof UtilizationRatio) {
+      this.numerator = numerator.numerator;
+      this.denominator = numerator.denominator;
+      return;
+    }
+    if (typeof numerator === "object" && numerator !== null && numerator.numerator !== undefined) {
+      this.numerator = Math.trunc(Number(numerator.numerator) || 0);
+      this.denominator = Math.trunc(Number(numerator.denominator) || 1);
+    } else {
+      this.numerator = Math.trunc(Number(numerator) || 0);
+      this.denominator = Math.trunc(Number(denominator) || 1);
+    }
+    if (this.denominator <= 0) {
+      this.numerator = 0;
+      this.denominator = 1;
+    }
+  }
+
+  get occupiedMs() { return this.numerator; }
+  get windowMs() { return this.denominator; }
+  get occupiedDuration() { return new Duration(this.numerator); }
+  get windowDuration() { return new Duration(this.denominator); }
+
+  toRatio() {
+    return this.denominator > 0 ? this.numerator / this.denominator : 0;
+  }
+
+  toPercentage(digits = 0) {
+    const pct = this.toRatio() * 100;
+    return digits === 0 ? Math.round(pct) : Number(pct.toFixed(digits));
+  }
+
+  valueOf() {
+    return this.toRatio();
+  }
+
+  toJSON() {
+    return { type: "ratio", numerator: this.numerator, denominator: this.denominator };
+  }
+
+  toString() {
+    return `${this.toPercentage()}%`;
+  }
+}
+
+export function parseDurationLiteral(raw) {
+  if (raw == null) return null;
+  if (raw instanceof Duration) return raw;
+  if (typeof raw === "object" && raw && typeof raw.milliseconds === "number") {
+    return new Duration(raw.milliseconds);
+  }
+  if (typeof raw === "number") return new Duration(raw);
+  if (typeof raw !== "string") return null;
+  const str = raw.trim();
+  if (!str) return null;
+
+  const singleMatch = /^(-?\d+(?:\.\d+)?)(ms|s|m|h|d)$/.exec(str);
+  if (singleMatch) {
+    const amount = Number(singleMatch[1]);
+    const unit = singleMatch[2];
+    let ms = 0;
+    if (unit === "ms") ms = amount;
+    else if (unit === "s") ms = amount * 1000;
+    else if (unit === "m") ms = amount * 60000;
+    else if (unit === "h") ms = amount * 3600000;
+    else if (unit === "d") ms = amount * 86400000;
+    return new Duration(ms);
+  }
+
+  const compoundRegex = /(\d+(?:\.\d+)?)(ms|s|m|h|d)/g;
+  let totalMs = 0;
+  let matchCount = 0;
+  let m;
+  while ((m = compoundRegex.exec(str)) !== null) {
+    matchCount++;
+    const amt = Number(m[1]);
+    const u = m[2];
+    if (u === "ms") totalMs += amt;
+    else if (u === "s") totalMs += amt * 1000;
+    else if (u === "m") totalMs += amt * 60000;
+    else if (u === "h") totalMs += amt * 3600000;
+    else if (u === "d") totalMs += amt * 86400000;
+  }
+  if (matchCount > 0 && str.replace(/(\d+(?:\.\d+)?)(ms|s|m|h|d)/g, "").trim() === "") {
+    return new Duration(totalMs);
+  }
+
+  return null;
+}
+
+export function addDurationToInstant(instantStr, durationMs) {
+  const isDateOnly = typeof instantStr === "string" && /^\d{4}-\d{2}-\d{2}$/.test(instantStr);
+  const d = new Date(isDateOnly ? `${instantStr}T00:00:00.000Z` : instantStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const newMs = d.getTime() + durationMs;
+  const res = new Date(newMs);
+  if (isDateOnly && durationMs % 86400000 === 0) {
+    return res.toISOString().slice(0, 10);
+  }
+  return res.toISOString();
+}
+
+export function subtractInstants(instantA, instantB) {
+  const isDateOnlyA = typeof instantA === "string" && /^\d{4}-\d{2}-\d{2}$/.test(instantA);
+  const isDateOnlyB = typeof instantB === "string" && /^\d{4}-\d{2}-\d{2}$/.test(instantB);
+  const da = new Date(isDateOnlyA ? `${instantA}T00:00:00.000Z` : instantA);
+  const db = new Date(isDateOnlyB ? `${instantB}T00:00:00.000Z` : instantB);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return null;
+  return new Duration(da.getTime() - db.getTime());
+}
+
+export function multiplyMoneyRate(rateInput, rateCurrency, durationMs, rateUnit = null) {
+  if (rateInput == null || durationMs == null) return null;
+  let rateMinor = null;
+  let currency = rateCurrency;
+  let unit = rateUnit;
+  let unitMs = null;
+
+  if (rateInput instanceof MoneyRate) {
+    rateMinor = rateInput.minorUnits;
+    currency = rateInput.currency;
+    unit = rateInput.unit;
+    unitMs = rateInput.unitMs;
+  } else if (typeof rateInput === "object" && rateInput && rateInput.minorUnits !== undefined) {
+    rateMinor = BigInt(rateInput.minorUnits);
+    currency = rateInput.currency ?? rateCurrency;
+    unit = rateInput.unit ?? rateUnit;
+    unitMs = rateInput.unitMs;
+  } else {
+    rateMinor = parseMoneyToMinorUnits(rateInput);
+    currency = rateCurrency;
+    unit = rateUnit;
+  }
+
+  if (rateMinor === null) return null;
+
+  if (!unitMs) {
+    if (!unit || !RATE_UNITS.has(unit)) {
+      throw new AirError(`invalid rate denominator unit \`${unit}\``);
+    }
+    unitMs = unit === "s" ? 1000 :
+             unit === "m" ? 60000 :
+             unit === "h" ? 3600000 :
+             unit === "d" ? 86400000 : null;
+    if (!unitMs) throw new AirError(`invalid rate denominator unit \`${unit}\``);
+  }
+
+  const durBig = BigInt(Math.round(durationMs));
+  const numerator = rateMinor * durBig;
+  const denominator = BigInt(unitMs);
+
+  const isNegative = numerator < 0n;
+  const absNum = isNegative ? -numerator : numerator;
+  const div = absNum / denominator;
+  const rem = absNum % denominator;
+  let roundedMinor = div;
+  if (rem * 2n >= denominator) {
+    roundedMinor += 1n;
+  }
+  if (isNegative) roundedMinor = -roundedMinor;
+
+  const finalAmount = Number(roundedMinor) / 100;
+  return { amount: finalAmount, currency, minorUnits: roundedMinor };
+}
+
 function parseDuration(raw, declaration) {
-  const match = /^(\d+)(d|h)$/.exec(raw ?? "");
-  if (!match || Number(match[1]) < 1) fail("rule after expects a positive duration such as 30d or 12h", declaration);
-  return { source: raw, milliseconds: Number(match[1]) * (match[2] === "d" ? 86_400_000 : 3_600_000) };
+  const dur = parseDurationLiteral(raw);
+  if (!dur || dur.ms < 1) fail("rule after expects a positive duration such as 30d or 12h", declaration);
+  return { source: raw, milliseconds: dur.ms };
 }
 
 function parsePredicate(raw, declaration, resource, property = "condition") {
@@ -556,8 +864,44 @@ function numericSemanticType(type) {
   return type === "number" || type === "money";
 }
 
+function splitOperandTerms(raw) {
+  const terms = [];
+  let current = "";
+  let op = "+";
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if ((ch === "+" || ch === "-") && current.trim().length > 0) {
+      terms.push({ op, raw: current.trim() });
+      current = "";
+      op = ch;
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim().length > 0) {
+    terms.push({ op, raw: current.trim() });
+  }
+  return terms;
+}
+
 function conditionOperandType(terms, declaration, source) {
   if (terms.length === 1) return { type: terms[0].type, currency: terms[0].currency ?? null };
+  const hasTemporal = terms.some((t) => t.type === "datetime" || t.type === "date");
+  const hasDuration = terms.some((t) => t.type === "duration");
+  if (hasTemporal && hasDuration) {
+    return { type: "datetime", currency: null };
+  }
+  if (terms.length === 2 && (terms[0].type === "datetime" || terms[0].type === "date") && (terms[1].type === "datetime" || terms[1].type === "date")) {
+    if (terms[1].op === "-") {
+      return { type: "duration", currency: null };
+    }
+    fail(`cannot add two timestamps \`${source}\``, declaration, {
+      code: "AIR_TYPE_CONDITION_MISMATCH", phase: "type"
+    });
+  }
+  if (terms.every((t) => t.type === "duration")) {
+    return { type: "duration", currency: null };
+  }
   if (terms.some((term) => !numericSemanticType(term.type))) {
     fail(`condition numeric operand \`${source}\` contains non-numeric terms`, declaration, {
       code: "AIR_TYPE_CONDITION_MISMATCH", phase: "type"
@@ -573,45 +917,83 @@ function conditionOperandType(terms, declaration, source) {
 }
 
 function parseConditionOperand(raw, declaration, resource, model, side) {
-  const parts = raw.split("+");
-  if (parts.some((part) => !part)) fail(`invalid condition operand \`${raw}\``, declaration);
-  const terms = parts.map((part) => {
+  const parts = splitOperandTerms(raw);
+  if (!parts.length) fail(`invalid condition operand \`${raw}\``, declaration);
+  const terms = parts.map(({ op, raw: part }) => {
+    const dur = parseDurationLiteral(part);
+    if (dur) {
+      return { op, kind: "duration", value: dur.ms, duration: dur, type: "duration", currency: null };
+    }
+    if (part === "today" || part === "now") {
+      return { op, kind: "temporal", value: part, type: part === "today" ? "date" : "datetime", currency: null };
+    }
     if (part.startsWith("@")) {
       const parameter = model.parameters.get(resource.id)?.get(part.slice(1));
       if (!parameter) fail(`condition references unknown parameter \`${resource.id}.${part.slice(1)}\``, declaration, {
         code: "AIR_REF_UNKNOWN_PARAMETER", phase: "resolve"
       });
-      return { kind: "parameter", id: parameter.id, value: parameter.value, type: scalarType(parameter.value), currency: null };
+      return { op, kind: "parameter", id: parameter.id, value: parameter.value, type: scalarType(parameter.value), currency: null };
     }
     const scalar = parseValue(part);
-    if (typeof scalar !== "string" || scalar !== part) return { kind: "literal", value: scalar, type: scalarType(scalar), currency: null };
-    const segments = part.split(".");
+    if (typeof scalar !== "string" || scalar !== part) return { op, kind: "literal", value: scalar, type: scalarType(scalar), currency: null };
+    
+    let lookupPart = part;
+    let isIntervalDuration = false;
+    if (part.endsWith(".duration")) {
+      lookupPart = part.slice(0, -9);
+      isIntervalDuration = true;
+    }
+
+    const segments = lookupPart.split(".");
     let current = resource;
     const path = [];
+    const eventFields = new Set(["to", "from", "event", "action", "at", "timestamp", "comment", "completed", "resource", "record_id", "record"]);
     for (let index = 0; index < segments.length; index += 1) {
-      const field = current?.fieldMap.get(segments[index]);
+      const seg = segments[index];
+      const field = current?.fieldMap.get(seg);
       if (!field) {
-        if (side === "right" && parts.length === 1 && index === 0) return { kind: "literal", value: part, type: "text", currency: null };
-        fail(`condition references unknown field \`${current?.id ?? resource.id}.${segments[index]}\``, declaration, {
+        if (eventFields.has(seg)) {
+          path.push({ field: seg, resource: current?.id ?? resource.id, ref: null, computed: false });
+          continue;
+        }
+        if (side === "right" && parts.length === 1 && index === 0) return { op, kind: "literal", value: part, type: "text", currency: null };
+        fail(`condition references unknown field \`${current?.id ?? resource.id}.${seg}\``, declaration, {
           code: "AIR_REF_UNKNOWN_FIELD", phase: "resolve"
         });
       }
       path.push({ field: field.id, resource: current.id, ref: field.ref, computed: Boolean(field.computed) });
       if (index < segments.length - 1) {
-        if (field.type !== "ref") fail(`condition path \`${part}\` crosses non-reference field \`${field.address}\``, declaration);
+        if (field.type !== "ref") fail(`condition path \`${lookupPart}\` crosses non-reference field \`${field.address}\``, declaration);
         current = model.entities.get(field.ref);
       }
     }
-    const finalField = current.fieldMap.get(segments.at(-1));
-    return { kind: "path", source: part, path, type: finalField.type, currency: finalField.currency ?? null, ref: finalField.ref ?? null, values: finalField.values ?? [] };
+    const lastSeg = segments.at(-1);
+    const finalField = current?.fieldMap.get(lastSeg);
+    if (!finalField && eventFields.has(lastSeg)) {
+      return { op, kind: "path", source: part, path, type: lastSeg === "at" || lastSeg === "timestamp" ? "datetime" : lastSeg === "completed" ? "bool" : "text", currency: null, ref: null, values: [] };
+    }
+    if (isIntervalDuration) {
+      return { op, kind: "interval_duration", source: part, path, type: "duration", currency: null, ref: null, values: [] };
+    }
+    return { op, kind: "path", source: part, path, type: finalField.type, currency: finalField.currency ?? null, ref: finalField.ref ?? null, values: finalField.values ?? [] };
   });
   return { source: raw, terms, ...conditionOperandType(terms, declaration, raw) };
 }
 
 function promoteTextLiteral(operand, other, declaration) {
-  if (operand.terms.length !== 1 || operand.terms[0].kind !== "literal" || operand.type !== "text") return;
+  if (operand.terms.length !== 1) return;
   const term = operand.terms[0];
-  if (!new Set(["text", "email", "phone", "enum", "date", "ref"]).has(other.type)) return;
+  if (term.kind === "temporal") {
+    term.type = other.type;
+    operand.type = other.type;
+    return;
+  }
+  if (other.type === "duration" && term.kind === "duration") {
+    operand.type = "duration";
+    return;
+  }
+  if (term.kind !== "literal" || (operand.type !== "text" && operand.type !== "date" && operand.type !== "datetime")) return;
+  if (!new Set(["text", "email", "phone", "enum", "date", "datetime", "ref", "duration"]).has(other.type)) return;
   if (other.type === "enum") {
     const otherTerm = other.terms.length === 1 ? other.terms[0] : null;
     if (otherTerm?.values && !otherTerm.values.includes(term.value)) {
@@ -635,6 +1017,24 @@ function validateConditionComparison(clause, declaration) {
   promoteTextLiteral(clause.right, clause.left, declaration);
   const left = clause.left;
   const right = clause.right;
+  if (left.type === "duration" && right.type === "duration") {
+    clause.type = "duration";
+    return;
+  }
+  if (left.type === "rate" && right.type === "rate") {
+    if (left.currency && right.currency && left.currency !== right.currency) {
+      fail("condition comparison uses different rate currencies", declaration, {
+        code: "AIR_TYPE_CONDITION_MISMATCH", phase: "type"
+      });
+    }
+    if (left.unit && right.unit && left.unit !== right.unit) {
+      fail("condition comparison uses different rate units", declaration, {
+        code: "AIR_TYPE_CONDITION_MISMATCH", phase: "type"
+      });
+    }
+    clause.type = "rate";
+    return;
+  }
   const numeric = numericSemanticType(left.type) && numericSemanticType(right.type);
   if (numeric) {
     if (left.type === "money" && right.type === "money" && left.currency && right.currency && left.currency !== right.currency) {
@@ -646,9 +1046,10 @@ function validateConditionComparison(clause, declaration) {
     return;
   }
   const same = left.type === right.type;
+  const isTemporal = (left.type === "date" || left.type === "datetime") && (right.type === "date" || right.type === "datetime");
   const stringCompatible = same && new Set(["text", "email", "phone", "enum", "ref"]).has(left.type);
   const equality = clause.operator === "==" || clause.operator === "!=";
-  if ((equality && (same || stringCompatible)) || (same && left.type === "date")) {
+  if ((equality && (same || stringCompatible)) || (same && left.type === "date") || isTemporal) {
     if (left.type === "ref") {
       const leftRef = left.terms[0]?.ref;
       const rightRef = right.terms[0]?.ref;
@@ -658,12 +1059,12 @@ function validateConditionComparison(clause, declaration) {
         });
       }
     }
-    if (!equality && left.type !== "date") {
+    if (!equality && !isTemporal && left.type !== "date") {
       fail(`condition operator \`${clause.operator}\` requires numeric or date operands`, declaration, {
         code: "AIR_TYPE_CONDITION_MISMATCH", phase: "type"
       });
     }
-    clause.type = left.type;
+    clause.type = isTemporal ? "date" : left.type;
     return;
   }
   fail(`condition requires compatible operands, found ${left.type} and ${right.type}`, declaration, {
@@ -789,7 +1190,8 @@ export function parseAir(source, options = {}) {
           id: declaration.id,
           title: stringProperty(declaration, "title", titleCase(declaration.id)),
           subtitle: stringProperty(declaration, "subtitle", ""),
-          initial: stringProperty(declaration, "initial", null)
+          initial: stringProperty(declaration, "initial", null),
+          timezone: stringProperty(declaration, "timezone", "UTC")
         };
         break;
       case "theme": {
@@ -850,6 +1252,12 @@ export function parseAir(source, options = {}) {
     if (!resource) fail(`field owner \`${resourceId}\` is not a resource`, declaration);
     const type = requireProperty(declaration, "type");
     if (!FIELD_TYPES.has(type)) fail(`unknown field type \`${type}\``, declaration);
+    const startProp = stringProperty(declaration, "start", null);
+    const endProp = stringProperty(declaration, "end", null);
+    const policy = stringProperty(declaration, "policy", "[start,end)");
+    const computedProp = stringProperty(declaration, "computed", null);
+    const unitProp = stringProperty(declaration, "unit", null);
+    const rateProp = stringProperty(declaration, "rate", null);
     const field = {
       id: fieldId, address: declaration.id, type,
       label: stringProperty(declaration, "label", titleCase(fieldId)),
@@ -861,7 +1269,12 @@ export function parseAir(source, options = {}) {
       min: integerProperty(declaration, "min", 0, 0),
       placeholder: stringProperty(declaration, "placeholder", ""),
       long: booleanProperty(declaration, "long"),
-      currency: stringProperty(declaration, "currency", null)
+      currency: stringProperty(declaration, "currency", null),
+      start: startProp,
+      end: endProp,
+      policy,
+      unit: unitProp,
+      rate: rateProp
     };
     field.options = field.values;
     if (type === "enum" && !field.values.length) fail(`enum field \`${declaration.id}\` requires values`, declaration);
@@ -870,15 +1283,89 @@ export function parseAir(source, options = {}) {
     if (type !== "ref" && field.ref) fail("only ref fields accept ref=...", declaration);
     if (field.ref && !model.entities.has(field.ref)) fail(`unknown referenced resource \`${field.ref}\``, declaration);
     if (type === "money" && !field.currency) fail(`money field \`${declaration.id}\` requires currency=...`, declaration);
+    if (type === "rate") {
+      if (!field.currency) fail(`rate field \`${declaration.id}\` requires currency=...`, declaration);
+      if (!field.unit) fail(`rate field \`${declaration.id}\` requires unit=...`, declaration);
+      if (!RATE_UNITS.has(field.unit)) fail(`rate field \`${declaration.id}\` unit must be one of s, m, h, d`, declaration);
+    }
     if (field.currency && !/^[A-Z]{3}$/.test(field.currency)) fail("currency expects a three-letter uppercase ISO code", declaration);
-    if (type !== "money" && field.currency) fail("only money fields accept currency=...", declaration);
+    if (type !== "money" && type !== "rate" && field.currency) fail("only money and rate fields accept currency=...", declaration);
+    if (type !== "rate" && type !== "duration" && field.unit && !computedProp) fail("only rate fields accept unit=...", declaration);
     if (field.long && type !== "text") fail("only text fields accept `long`", declaration);
+    if (type === "interval") {
+      if (!startProp || !endProp) fail(`interval field \`${declaration.id}\` requires start=... and end=...`, declaration);
+      field.computed = { kind: "interval", start: startProp, end: endProp, policy };
+    } else if (computedProp) {
+      if (computedProp.includes("*")) {
+        const [left, right] = computedProp.split("*").map((s) => s.trim());
+        field.computed = { kind: "product", left, right, unit: unitProp ?? null };
+      } else if (computedProp.endsWith(".duration")) {
+        const intervalField = computedProp.replace(/\.duration$/, "").trim();
+        field.computed = { kind: "interval_duration", intervalField };
+      } else {
+        field.computed = { kind: "expression", source: computedProp };
+      }
+    }
     insertUnique(resource.fieldMap, field.id, field, declaration);
     resource.fields.push(field);
   }
 
   for (const resource of model.entities.values()) {
     if (!resource.fields.length) fail(`resource \`${resource.id}\` has no fields`);
+    for (const field of resource.fields) {
+      if (field.type === "interval") {
+        if (!resource.fieldMap.has(field.start)) fail(`interval \`${resource.id}.${field.id}\` references unknown start field \`${field.start}\``);
+        if (!resource.fieldMap.has(field.end)) fail(`interval \`${resource.id}.${field.id}\` references unknown end field \`${field.end}\``);
+      }
+      if (field.computed?.kind === "product") {
+        const resolveStaticType = (pathStr) => {
+          if (pathStr.endsWith(".duration")) {
+            const intFieldName = pathStr.replace(/\.duration$/, "");
+            const intField = resource.fieldMap.get(intFieldName);
+            if (!intField || intField.type !== "interval") {
+              fail(`computed product \`${field.address}\` references unknown interval \`${intFieldName}\``);
+            }
+            return { type: "duration", currency: null, unit: null };
+          }
+          const parts = pathStr.split(".");
+          let currentRes = resource;
+          let targetField = null;
+          for (let i = 0; i < parts.length; i++) {
+            const seg = parts[i];
+            targetField = currentRes?.fieldMap?.get(seg);
+            if (!targetField) fail(`computed product \`${field.address}\` references unknown field \`${seg}\``);
+            if (i < parts.length - 1) {
+              if (targetField.type !== "ref") fail(`computed path \`${pathStr}\` crosses non-reference \`${targetField.id}\``);
+              currentRes = model.entities.get(targetField.ref);
+              if (!currentRes) fail(`computed path \`${pathStr}\` references unknown resource \`${targetField.ref}\``);
+            }
+          }
+          return { type: targetField.type, currency: targetField.currency, unit: targetField.unit };
+        };
+
+        const leftType = resolveStaticType(field.computed.left);
+        const rightType = resolveStaticType(field.computed.right);
+
+        const hasDuration = leftType.type === "duration" || rightType.type === "duration";
+        const hasRate = leftType.type === "rate" || rightType.type === "rate";
+        const rateInfo = leftType.type === "rate" ? leftType : rightType.type === "rate" ? rightType : null;
+
+        if (!hasDuration || !hasRate) {
+          fail(`computed product \`${field.address}\` requires a duration and a rate; cannot multiply \`${leftType.type}\` and \`${rightType.type}\``, null, {
+            code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+          });
+        }
+
+        if (field.type === "money" && field.currency && rateInfo.currency && field.currency !== rateInfo.currency) {
+          fail(`computed money field \`${field.address}\` currency \`${field.currency}\` does not match rate currency \`${rateInfo.currency}\``, null, {
+            code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+          });
+        }
+
+        field.computed.rateUnit = rateInfo.unit;
+        field.computed.rateCurrency = rateInfo.currency;
+      }
+    }
     resource.labelField ??= resource.fields.find((field) => field.type === "text" && !field.long)?.id
       ?? resource.fields.find((field) => field.type === "email")?.id ?? resource.fields[0].id;
     if (!resource.fieldMap.has(resource.labelField)) fail(`resource \`${resource.id}\` has unknown label field \`${resource.labelField}\``);
@@ -950,7 +1437,7 @@ export function parseAir(source, options = {}) {
     const highlight = {
       id: highlightId,
       address: declaration.id,
-      when: parsePredicate(requireProperty(declaration, "when"), declaration, resource, "highlight when"),
+      when: parseCondition(requireProperty(declaration, "when"), declaration, resource, model, "highlight when"),
       tone
     };
     const values = model.highlights.get(resourceId) ?? [];
@@ -978,7 +1465,9 @@ export function parseAir(source, options = {}) {
     model.rules.push({ id: ruleId, address: declaration.id, resource: resourceId, field: fieldId, from, to, since: sinceId, duration });
   }
 
-  for (const declaration of declarations.filter((item) => item.kind === "insight" && item.props.source != null)) {
+  const isEntityComputedInsight = (decl) => decl.props.source != null && !decl.props.source.startsWith("events.") && decl.props.group != null && splitOwnedId(decl)[0] !== decl.props.source;
+
+  for (const declaration of declarations.filter((item) => item.kind === "insight" && isEntityComputedInsight(item))) {
     const [ownerId, insightId] = splitOwnedId(declaration);
     const owner = model.entities.get(ownerId);
     if (!owner) fail(`insight owner \`${ownerId}\` is not a resource`, declaration);
@@ -992,11 +1481,12 @@ export function parseAir(source, options = {}) {
       fail(`insight group must be a ${sourceId} reference to ${ownerId}`, declaration);
     }
     const op = stringProperty(declaration, "op", "count");
-    if (!new Set(["count", "sum", "average"]).has(op)) fail(`unsupported grouped insight operation \`${op}\``, declaration);
+    if (!new Set(["count", "sum", "average", "avg", "min", "max"]).has(op)) fail(`unsupported grouped insight operation \`${op}\``, declaration);
     const aggregateFieldId = stringProperty(declaration, "field", null);
     const aggregateField = aggregateFieldId ? source.fieldMap.get(aggregateFieldId) : null;
-    if (op !== "count" && (!aggregateField || !NUMERIC_TYPES.has(aggregateField.type))) {
-      fail(`${op} grouped insight requires a numeric field on ${sourceId}`, declaration);
+    const isDurationField = aggregateField?.type === "duration" || aggregateFieldId?.endsWith(".duration") || aggregateField?.type === "interval";
+    if (op !== "count" && (!aggregateField || (!NUMERIC_TYPES.has(aggregateField.type) && !isDurationField))) {
+      fail(`${op} grouped insight requires a numeric, duration, or interval field on ${sourceId}`, declaration);
     }
     const whereRaw = stringProperty(declaration, "where", null);
     const where = whereRaw ? parseCondition(whereRaw, declaration, source, model, "insight where") : null;
@@ -1005,9 +1495,10 @@ export function parseAir(source, options = {}) {
     if (window && window !== "month") fail("insight window currently supports only month", declaration);
     if (window && (!dateId || source.fieldMap.get(dateId)?.type !== "date")) fail("windowed insight requires date=<date-field>", declaration);
     if (!window && dateId) fail("insight date requires window=month", declaration);
+    const fieldType = isDurationField ? "duration" : aggregateField?.type === "money" ? "money" : "number";
     const field = {
       id: insightId, address: declaration.id,
-      type: aggregateField?.type === "money" ? "money" : "number",
+      type: fieldType,
       label: stringProperty(declaration, "label", titleCase(insightId)),
       required: false, unique: false, values: [], options: [], ref: null,
       default: null, min: 0, placeholder: "", long: false,
@@ -1091,15 +1582,36 @@ export function parseAir(source, options = {}) {
     if (!resource) fail(`invariant owner \`${resourceId}\` is not a resource`, declaration);
     const required = listProperty(declaration, "require");
     const immutable = listProperty(declaration, "immutable");
-    if (!required.length && !immutable.length) fail("invariant requires require=... or immutable=...", declaration);
+    const noneTarget = stringProperty(declaration, "none", null);
+    const existsTarget = stringProperty(declaration, "exists", null);
+    const scopeField = stringProperty(declaration, "scope", null);
+    const overlapsField = stringProperty(declaration, "overlaps", null);
+    const denyMessage = stringProperty(declaration, "deny", null);
+    const whereRaw = stringProperty(declaration, "where", null);
+    const whenRaw = stringProperty(declaration, "when", null);
+
+    if (!required.length && !immutable.length && !noneTarget && !existsTarget && !denyMessage) {
+      fail("invariant requires require=..., immutable=..., none=..., exists=..., or deny=...", declaration);
+    }
+    if (noneTarget && !model.entities.has(noneTarget)) fail(`unknown referenced resource \`${noneTarget}\``, declaration);
+    if (existsTarget && !model.entities.has(existsTarget)) fail(`unknown referenced resource \`${existsTarget}\``, declaration);
+
+    const targetResource = noneTarget ? model.entities.get(noneTarget) : resource;
+
     for (const fieldId of [...required, ...immutable.filter((fieldId) => fieldId !== "*")]) {
       const field = resource.fieldMap.get(fieldId);
       if (!field || field.computed) fail(`invariant references unknown stored field \`${resourceId}.${fieldId}\``, declaration);
     }
     const invariant = {
       id: invariantId, address: declaration.id, resource: resourceId,
-      when: parseCondition(requireProperty(declaration, "when"), declaration, resource, model, "invariant when"),
-      required, immutable
+      when: whenRaw ? parseCondition(whenRaw, declaration, resource, model, "invariant when") : null,
+      required, immutable,
+      none: noneTarget,
+      exists: existsTarget,
+      scope: scopeField,
+      overlaps: overlapsField,
+      where: whereRaw ? parseCondition(whereRaw, declaration, targetResource, model, "invariant where") : null,
+      deny: denyMessage
     };
     const values = model.invariants.get(resourceId) ?? [];
     if (values.some((item) => item.id === invariantId)) fail(`duplicate invariant ID \`${declaration.id}\``, declaration);
@@ -1209,29 +1721,64 @@ export function parseAir(source, options = {}) {
     model.pageMap.set(page.id, page);
   }
 
-  for (const declaration of declarations.filter((item) => item.kind === "insight")) {
-    if (declaration.props.source != null) continue;
+  for (const declaration of declarations.filter((item) => item.kind === "insight" && !isEntityComputedInsight(item))) {
     if (!overviewDeclaration) fail("insight requires an `overview` declaration", declaration);
     const [resourceId, insightId] = splitOwnedId(declaration);
-    const resource = model.entities.get(resourceId);
+    let resource = model.entities.get(resourceId);
+    let source = resource;
+    const sourceProp = declaration.props.source;
+    if (sourceProp) {
+      if (sourceProp.startsWith("events.")) {
+        const targetRes = sourceProp.slice(7);
+        source = model.entities.get(targetRes);
+        if (!source) fail(`insight source \`${sourceProp}\` references unknown resource \`${targetRes}\``, declaration);
+      } else {
+        source = model.entities.get(sourceProp);
+        if (!source) fail(`insight source \`${sourceProp}\` is not a resource`, declaration);
+      }
+    }
     if (!resource) fail(`insight owner \`${resourceId}\` is not a resource`, declaration);
     const op = stringProperty(declaration, "op", "sum");
-    if (!new Set(["count", "sum", "average"]).has(op)) fail(`unsupported insight operation \`${op}\``, declaration);
+    if (!new Set(["count", "sum", "average", "avg", "min", "max", "utilization"]).has(op)) fail(`unsupported insight operation \`${op}\``, declaration);
     const fieldId = stringProperty(declaration, "field", null);
-    const field = fieldId ? resource.fieldMap.get(fieldId) : null;
-    if (fieldId && !field) fail(`insight references unknown field \`${resourceId}.${fieldId}\``, declaration);
-    if (op !== "count" && (!field || !NUMERIC_TYPES.has(field.type))) fail(`${op} insight requires a number or money field`, declaration);
+    const field = fieldId ? source.fieldMap.get(fieldId) : null;
+    const isPathDuration = fieldId?.endsWith(".duration");
+    const baseField = isPathDuration ? source.fieldMap.get(fieldId.slice(0, -9)) : field;
+    const isDurationField = field?.type === "duration" || (isPathDuration && (baseField?.type === "interval" || !baseField)) || field?.type === "interval";
+    const fromVal = stringProperty(declaration, "from", null);
+    const toVal = stringProperty(declaration, "to", null);
+    const isEventDurationCorrelation = sourceProp?.startsWith("events.") && fromVal && toVal;
+
+    if (fieldId && !field && !isPathDuration) fail(`insight references unknown field \`${sourceProp ?? resourceId}.${fieldId}\``, declaration);
+    if (op !== "count" && op !== "utilization" && !isEventDurationCorrelation) {
+      if (!field && !isPathDuration) {
+        fail(`${op} insight requires a number, money, duration, or interval field`, declaration);
+      }
+      if (field && !NUMERIC_TYPES.has(field.type) && !isDurationField) {
+        fail(`${op} insight requires a number, money, duration, or interval field`, declaration);
+      }
+    }
     const groupId = stringProperty(declaration, "group", null);
-    const group = groupId ? resource.fieldMap.get(groupId) : null;
-    if (groupId && (!group || !new Set(["enum", "ref", "bool"]).has(group.type))) fail("overview insight group requires an enum, ref, or bool field", declaration);
+    const group = groupId ? source.fieldMap.get(groupId) : null;
+    if (groupId && (!group || !new Set(["enum", "ref", "bool", "text"]).has(group.type))) fail("overview insight group requires an enum, ref, bool, or text field", declaration);
     const whereRaw = stringProperty(declaration, "where", null);
+    const windowVal = stringProperty(declaration, "window", null);
+    const overlapsVal = stringProperty(declaration, "overlaps", null);
+    const explicitFormat = stringProperty(declaration, "format", null);
+
+    const defaultFormat = groupId ? "breakdown" :
+                          op === "utilization" ? "percentage" :
+                          isEventDurationCorrelation || isDurationField ? "duration" :
+                          field?.type === "money" ? "money" : "number";
+
     const page = model.pageMap.get("overview");
     page.metrics.push({
-      id: insightId, address: declaration.id, source: resourceId, op, field: fieldId,
+      id: insightId, address: declaration.id, source: sourceProp ?? resourceId, op, field: fieldId,
+      from: fromVal, to: toVal, window: windowVal, overlaps: overlapsVal,
       label: stringProperty(declaration, "label", field ? `${titleCase(op)} ${field.label.toLowerCase()}` : `${titleCase(op)} ${resource.plural.toLowerCase()}`),
-      where: whereRaw ? parseCondition(whereRaw, declaration, resource, model, "insight where") : null,
+      where: whereRaw ? parseCondition(whereRaw, declaration, source, model, "insight where") : null,
       group: groupId, tone: stringProperty(declaration, "tone", toneAt(page.metrics.length)),
-      format: groupId ? "breakdown" : field?.type === "money" ? "money" : "number", inferred: false
+      format: explicitFormat ?? defaultFormat, inferred: false
     });
   }
 
@@ -1262,6 +1809,7 @@ function validateScalar(field, value, model, records = null, currentId = null) {
   if (field.type === "enum" && !field.values.includes(text)) return `${field.label} must be one of ${field.values.join(", ")}`;
   if (field.type === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${field.label} must be a date`;
   if (NUMERIC_TYPES.has(field.type) && !Number.isFinite(Number(value))) return `${field.label} must be a number`;
+  if (field.type === "duration" && !parseDurationLiteral(value) && typeof value !== "number" && !(value instanceof Duration)) return `${field.label} must be a duration`;
   if (field.type === "bool" && typeof value !== "boolean") return `${field.label} must be true or false`;
   if (field.type === "ref" && !model.entities.has(field.ref)) return `${field.label} references an unknown resource`;
   if (field.unique && records?.some((record) => record.id !== currentId && String(record[field.id] ?? "").toLowerCase() === text.toLowerCase())) return `${field.label} must be unique`;
@@ -1274,12 +1822,14 @@ function normalizeInput(field, value, clock) {
     if (field.default != null) {
       if (NUMERIC_TYPES.has(field.type)) return Number(field.default);
       if (field.type === "bool") return field.default === "true";
+      if (field.type === "duration") return parseDurationLiteral(field.default) ?? field.default;
       return field.default;
     }
     return field.type === "bool" ? false : "";
   }
   if (NUMERIC_TYPES.has(field.type)) return Number(value);
   if (field.type === "bool") return value === true || value === "true";
+  if (field.type === "duration") return parseDurationLiteral(value) ?? value;
   return typeof value === "string" ? value.trim() : value;
 }
 
@@ -1345,6 +1895,7 @@ export class AppRuntime {
   constructor(model, options = {}) {
     this.model = model;
     this.clock = options.clock ?? (() => new Date());
+    this.timezone = options.timezone ?? model.app?.timezone ?? "UTC";
     this.idFactory = options.idFactory ?? ((resourceId) => `${resourceId.slice(0, 3)}_${globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10)}`);
     this.storage = model.capabilities.has("storage.local") ? (options.storage ?? new MemoryStorage()) : new MemoryStorage();
     this.principal = options.principal ?? { roles: [] };
@@ -1355,7 +1906,42 @@ export class AppRuntime {
     this.seedData = options.seedData instanceof Map ? options.seedData : parseSeedData(options.seedData ?? {}, model, { clock: this.clock });
     this.data = new Map();
     this.subscribers = new Set();
+    this.mutex = new AsyncMutex();
     this.load();
+  }
+
+  hasCrossRecordInvariants(resourceId) {
+    const invariants = this.model.invariants.get(resourceId) ?? [];
+    return invariants.some((inv) => inv.none || inv.exists || inv.overlaps || inv.scope);
+  }
+
+  assertAdapterAtomicCapability(resourceId) {
+    if (this.hasCrossRecordInvariants(resourceId)) {
+      const adapter = this.adapter(resourceId);
+      if (adapter && typeof adapter.capabilities === "function") {
+        const caps = adapter.capabilities();
+        if (!caps.includes("atomic_mutation") && !caps.includes("serializable_constraints")) {
+          throw new AirError(`Atomic constraint enforcement unavailable for resource \`${resourceId}\` with cross-record invariants`, null, {
+            code: "AIR_ATOMIC_CONSTRAINT_UNAVAILABLE",
+            phase: "execute",
+            category: FAILURE_CATEGORIES.ATOMIC_CONSTRAINT_UNAVAILABLE
+          });
+        }
+      }
+    }
+  }
+
+  currentDate(tz = this.timezone) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(this.clock());
+  }
+
+  currentInstant() {
+    return this.clock().toISOString();
   }
 
   subscribe(listener) {
@@ -1424,6 +2010,30 @@ export class AppRuntime {
     return records;
   }
 
+  events(resourceId) {
+    const records = this.records(resourceId);
+    const list = [];
+    for (const record of records) {
+      const history = record._air_history ?? [];
+      for (const entry of history) {
+        list.push({
+          id: entry.id,
+          resource: resourceId,
+          record_id: record.id,
+          event: entry.event,
+          action: entry.action,
+          from: entry.from,
+          to: entry.to,
+          at: entry.at,
+          actor: entry.actor,
+          comment: entry.comment,
+          completed: entry.completed
+        });
+      }
+    }
+    return Object.freeze(list);
+  }
+
   resolveReferencePath(record, path) {
     let current = record;
     for (let index = 0; index < path.length; index += 1) {
@@ -1443,11 +2053,11 @@ export class AppRuntime {
     for (let index = 0; index < path.length; index += 1) {
       const step = path[index];
       const resource = this.model.entities.get(currentResourceId);
-      const field = resource.fieldMap.get(step.field);
-      const value = field.computed ? this.computedValue(field, current, currentResourceId) : current?.[step.field];
+      const field = resource?.fieldMap?.get(step.field);
+      const value = field?.computed ? this.computedValue(field, current, currentResourceId) : current?.[step.field];
       if (index === path.length - 1) return value;
       if (isBlank(value)) return null;
-      currentResourceId = field.ref;
+      currentResourceId = field?.ref ?? step.ref;
       current = this.records(currentResourceId).find((candidate) => candidate.id === value);
       if (!current) return null;
     }
@@ -1455,14 +2065,53 @@ export class AppRuntime {
   }
 
   conditionOperand(resourceId, record, operand) {
-    const values = operand.terms.map((term) => {
-      if (term.kind === "literal" || term.kind === "parameter") return term.value;
-      return this.resolveConditionPath(resourceId, record, term.path);
+    const evaluatedTerms = operand.terms.map((term) => {
+      let val;
+      if (term.kind === "literal" || term.kind === "parameter") val = term.value;
+      else if (term.kind === "duration") val = term.duration;
+      else if (term.kind === "temporal") {
+        if (term.value === "today") val = this.currentDate();
+        else if (term.value === "now") val = this.currentInstant();
+        else val = term.value;
+      } else if (term.kind === "interval_duration") {
+        const intervalVal = this.resolveConditionPath(resourceId, record, term.path);
+        val = getIntervalDuration(intervalVal);
+      } else {
+        val = this.resolveConditionPath(resourceId, record, term.path);
+      }
+      return { ...term, evaluated: val };
     });
-    if (values.some((value) => isBlank(value))) return MISSING;
-    if (values.length === 1) return values[0];
-    if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) return MISSING;
-    return values.reduce((total, value) => total + value, 0);
+
+    if (evaluatedTerms.some((t) => isBlank(t.evaluated))) return MISSING;
+    if (evaluatedTerms.length === 1) return evaluatedTerms[0].evaluated;
+
+    if ((evaluatedTerms[0].type === "datetime" || evaluatedTerms[0].type === "date") && evaluatedTerms[1].type === "duration") {
+      const instant = evaluatedTerms[0].evaluated;
+      const dur = evaluatedTerms[1].evaluated instanceof Duration ? evaluatedTerms[1].evaluated.ms : Number(evaluatedTerms[1].evaluated);
+      const ms = evaluatedTerms[1].op === "-" ? -dur : dur;
+      return addDurationToInstant(instant, ms);
+    }
+
+    if ((evaluatedTerms[0].type === "datetime" || evaluatedTerms[0].type === "date") &&
+        (evaluatedTerms[1].type === "datetime" || evaluatedTerms[1].type === "date") &&
+        evaluatedTerms[1].op === "-") {
+      return subtractInstants(evaluatedTerms[0].evaluated, evaluatedTerms[1].evaluated);
+    }
+
+    if (evaluatedTerms[0].type === "duration" && evaluatedTerms[1].type === "duration") {
+      const d1 = evaluatedTerms[0].evaluated instanceof Duration ? evaluatedTerms[0].evaluated.ms : Number(evaluatedTerms[0].evaluated);
+      const d2 = evaluatedTerms[1].evaluated instanceof Duration ? evaluatedTerms[1].evaluated.ms : Number(evaluatedTerms[1].evaluated);
+      const resMs = evaluatedTerms[1].op === "-" ? d1 - d2 : d1 + d2;
+      return new Duration(resMs);
+    }
+
+    let total = 0;
+    for (const t of evaluatedTerms) {
+      const num = Number(t.evaluated);
+      if (!Number.isFinite(num)) return MISSING;
+      total = (t.op === "-") ? total - num : total + num;
+    }
+    return total;
   }
 
   evaluateCondition(condition, resourceId, record) {
@@ -1472,6 +2121,35 @@ export class AppRuntime {
       const left = this.conditionOperand(resourceId, record, clause.left);
       const right = this.conditionOperand(resourceId, record, clause.right);
       if (left === MISSING || right === MISSING) return false;
+      
+      if (clause.type === "duration") {
+        const valA = left instanceof Duration ? left.ms : typeof left === "string" ? (parseDurationLiteral(left)?.ms ?? Number(left)) : Number(left);
+        const valB = right instanceof Duration ? right.ms : typeof right === "string" ? (parseDurationLiteral(right)?.ms ?? Number(right)) : Number(right);
+        if (clause.operator === "==") return valA === valB;
+        if (clause.operator === "!=") return valA !== valB;
+        if (clause.operator === ">") return valA > valB;
+        if (clause.operator === ">=") return valA >= valB;
+        if (clause.operator === "<") return valA < valB;
+        if (clause.operator === "<=") return valA <= valB;
+        return false;
+      }
+
+      if (clause.type === "datetime" || clause.type === "date") {
+        const toMs = (val) => {
+          if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)) return new Date(`${val}T00:00:00.000Z`).getTime();
+          return new Date(val).getTime();
+        };
+        const tA = toMs(left);
+        const tB = toMs(right);
+        if (clause.operator === "==") return tA === tB;
+        if (clause.operator === "!=") return tA !== tB;
+        if (clause.operator === ">") return tA > tB;
+        if (clause.operator === ">=") return tA >= tB;
+        if (clause.operator === "<") return tA < tB;
+        if (clause.operator === "<=") return tA <= tB;
+        return false;
+      }
+
       const numeric = numericSemanticType(clause.type);
       if (numeric && (typeof left !== "number" || typeof right !== "number" || !Number.isFinite(left) || !Number.isFinite(right))) return false;
       const a = left;
@@ -1575,10 +2253,110 @@ export class AppRuntime {
       if (error) errors[field.id] = error;
       if (!error && field.type === "ref" && normalized && !this.records(field.ref).some((record) => record.id === normalized)) errors[field.id] = `${field.label} references a missing record`;
     }
+
+    // Interval boundary validation: start must be before end (or same day for date-only)
+    for (const field of resource.fields) {
+      if (field.type === "interval") {
+        const startVal = values[field.start];
+        const endVal = values[field.end];
+        if (startVal && endVal) {
+          const isDateOnly = typeof startVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(startVal) &&
+                             typeof endVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endVal);
+          const invalid = isDateOnly ? startVal > endVal : startVal >= endVal;
+          if (invalid) {
+            const msg = `${field.label || field.id} start must be before end`;
+            errors[field.id] = msg;
+            errors[field.start] = `${resource.fieldMap.get(field.start)?.label || field.start} must be before ${resource.fieldMap.get(field.end)?.label || field.end}`;
+          }
+        }
+      }
+    }
+
     for (const invariant of this.model.invariants.get(resourceId) ?? []) {
-      if (!this.evaluateCondition(invariant.when, resourceId, values)) continue;
+      const isConditionActive = !invariant.when || this.evaluateCondition(invariant.when, resourceId, values);
+      if (!isConditionActive) continue;
+
       for (const fieldId of invariant.required) {
-        if (isBlank(values[fieldId])) errors[fieldId] = `${resource.fieldMap.get(fieldId).label} is required by ${invariant.id}`;
+        if (isBlank(values[fieldId])) errors[fieldId] = `${resource.fieldMap.get(fieldId)?.label || fieldId} is required by ${invariant.id}`;
+      }
+
+      if (invariant.deny && !invariant.none && !invariant.exists && !invariant.overlaps) {
+        errors[invariant.id] = invariant.deny;
+        const leftTerm = invariant.when?.alternatives?.[0]?.[0]?.left?.terms?.[0];
+        if (leftTerm?.kind === "path" && leftTerm.path?.length === 1) {
+          errors[leftTerm.path[0].field] = invariant.deny;
+        }
+      }
+
+      if (invariant.none) {
+        const targetResourceId = invariant.none;
+        const targetRecords = this.records(targetResourceId);
+        const scopeVal = invariant.scope ? values[invariant.scope] : null;
+
+        let candidateInterval = null;
+        if (invariant.overlaps) {
+          const intervalField = resource.fieldMap.get(invariant.overlaps);
+          if (intervalField && intervalField.type === "interval") {
+            candidateInterval = {
+              start: values[intervalField.start],
+              end: values[intervalField.end]
+            };
+          } else if (values[invariant.overlaps] && typeof values[invariant.overlaps] === "object") {
+            candidateInterval = values[invariant.overlaps];
+          }
+        }
+        if (!candidateInterval) {
+          const startKey = ["start_at", "start", "from"].find((k) => values[k] != null);
+          const endKey = ["end_at", "end", "to"].find((k) => values[k] != null);
+          if (startKey && endKey) {
+            candidateInterval = { start: values[startKey], end: values[endKey] };
+          }
+        }
+
+        if (candidateInterval && candidateInterval.start && candidateInterval.end) {
+          const targetEntity = this.model.entities.get(targetResourceId);
+          for (const targetRec of targetRecords) {
+            if (targetResourceId === resourceId && currentId != null && targetRec.id === currentId) continue;
+            if (targetRec._archived_at) continue;
+            if (invariant.scope && targetRec[invariant.scope] !== scopeVal) continue;
+            if (invariant.where && !this.evaluateCondition(invariant.where, targetResourceId, targetRec)) continue;
+
+            let targetInterval = null;
+            if (invariant.overlaps) {
+              const targetField = targetEntity?.fieldMap.get(invariant.overlaps);
+              if (targetField && targetField.type === "interval") {
+                targetInterval = {
+                  start: targetRec[targetField.start],
+                  end: targetRec[targetField.end]
+                };
+              }
+            }
+            if (!targetInterval) {
+              const targetIntervalField = targetEntity?.fields.find((f) => f.type === "interval");
+              if (targetIntervalField) {
+                targetInterval = {
+                  start: targetRec[targetIntervalField.start],
+                  end: targetRec[targetIntervalField.end]
+                };
+              } else {
+                const sKey = ["start_at", "start", "from"].find((k) => targetRec[k] != null);
+                const eKey = ["end_at", "end", "to"].find((k) => targetRec[k] != null);
+                if (sKey && eKey) {
+                  targetInterval = { start: targetRec[sKey], end: targetRec[eKey] };
+                }
+              }
+            }
+
+            if (targetInterval && targetInterval.start && targetInterval.end) {
+              if (intervalsOverlap(candidateInterval, targetInterval)) {
+                const message = invariant.deny || `Conflicting ${targetEntity?.singular || targetResourceId} overlap detected for ${resource.singular || resourceId}`;
+                errors[invariant.overlaps || invariant.id] = message;
+                errors[invariant.id] = message;
+                break;
+              }
+            }
+          }
+        }
       }
     }
     return errors;
@@ -1610,8 +2388,9 @@ export class AppRuntime {
   }
 
   create(resourceId, values) {
+    this.assertAdapterAtomicCapability(resourceId);
     const { record, errors } = this.prepare(resourceId, values);
-    if (!record) return { record: null, errors };
+    if (!record) return { record: null, errors, events: [] };
     this.assertCan(resourceId, "create", record);
     const events = [];
     const process = this.model.processes.get(resourceId);
@@ -1634,6 +2413,7 @@ export class AppRuntime {
   }
 
   update(resourceId, id, values) {
+    this.assertAdapterAtomicCapability(resourceId);
     const existing = this.records(resourceId).find((record) => record.id === id);
     if (!existing) throw new AirError(`unknown record \`${resourceId}.${id}\``);
     this.assertCan(resourceId, "edit", existing);
@@ -1672,6 +2452,7 @@ export class AppRuntime {
   }
 
   delete(resourceId, id) {
+    this.assertAdapterAtomicCapability(resourceId);
     const records = this.records(resourceId);
     const target = records.find((record) => record.id === id);
     if (!target) throw new AirError(`unknown record \`${resourceId}.${id}\``);
@@ -1696,6 +2477,91 @@ export class AppRuntime {
       recordId: id
     });
     return { archived: false };
+  }
+
+  async runAtomicMutation(operation, options = {}) {
+    const adapter = options.adapter ?? this.adapter("*") ?? (this.dataAdapters.size ? [...this.dataAdapters.values()][0] : null);
+    if (adapter && typeof adapter.runAtomicMutation === "function") {
+      return adapter.runAtomicMutation(async (txAdapter) => {
+        return this.mutex.runExclusive(async () => {
+          return operation(this, txAdapter);
+        });
+      }, options);
+    }
+    return this.mutex.runExclusive(async () => {
+      return operation(this, null);
+    });
+  }
+
+  async mutateAtomic(resourceId, mutatorFn, options = {}) {
+    this.assertAdapterAtomicCapability(resourceId);
+    return this.mutex.runExclusive(async () => {
+      return mutatorFn();
+    });
+  }
+
+  async createAsync(resourceId, values) {
+    this.assertAdapterAtomicCapability(resourceId);
+    const adapter = this.adapter(resourceId);
+    if (adapter && typeof adapter.runAtomicMutation === "function") {
+      const res = await adapter.runAtomicMutation(async (txAdapter) => {
+        return this.mutex.runExclusive(async () => {
+          return this.create(resourceId, values);
+        });
+      });
+      return res?.result ?? res;
+    }
+    return this.mutex.runExclusive(async () => {
+      return this.create(resourceId, values);
+    });
+  }
+
+  async updateAsync(resourceId, id, values) {
+    this.assertAdapterAtomicCapability(resourceId);
+    const adapter = this.adapter(resourceId);
+    if (adapter && typeof adapter.runAtomicMutation === "function") {
+      const res = await adapter.runAtomicMutation(async (txAdapter) => {
+        return this.mutex.runExclusive(async () => {
+          return this.update(resourceId, id, values);
+        });
+      });
+      return res?.result ?? res;
+    }
+    return this.mutex.runExclusive(async () => {
+      return this.update(resourceId, id, values);
+    });
+  }
+
+  async deleteAsync(resourceId, id) {
+    this.assertAdapterAtomicCapability(resourceId);
+    const adapter = this.adapter(resourceId);
+    if (adapter && typeof adapter.runAtomicMutation === "function") {
+      const res = await adapter.runAtomicMutation(async (txAdapter) => {
+        return this.mutex.runExclusive(async () => {
+          return this.delete(resourceId, id);
+        });
+      });
+      return res?.result ?? res;
+    }
+    return this.mutex.runExclusive(async () => {
+      return this.delete(resourceId, id);
+    });
+  }
+
+  async transitionAsync(resourceId, id, action, options = {}) {
+    this.assertAdapterAtomicCapability(resourceId);
+    const adapter = this.adapter(resourceId);
+    if (adapter && typeof adapter.runAtomicMutation === "function") {
+      const res = await adapter.runAtomicMutation(async (txAdapter) => {
+        return this.mutex.runExclusive(async () => {
+          return this.transition(resourceId, id, action, options);
+        });
+      });
+      return res?.result ?? res;
+    }
+    return this.mutex.runExclusive(async () => {
+      return this.transition(resourceId, id, action, options);
+    });
   }
 
   durationEnd(startInput, duration) {
@@ -1821,6 +2687,7 @@ export class AppRuntime {
   }
 
   transition(resourceId, id, action, input = {}) {
+    this.assertAdapterAtomicCapability(resourceId);
     const process = this.model.processes.get(resourceId);
     if (!process) throw new AirError(`resource \`${resourceId}\` has no process`);
     const existing = this.records(resourceId).find((candidate) => candidate.id === id);
@@ -1958,9 +2825,82 @@ export class AppRuntime {
     return { records, total, page, pageSize, totalPages };
   }
 
+  resolvePathValue(resourceId, record, pathStr) {
+    if (!pathStr || !record) return null;
+    if (pathStr.endsWith(".duration")) {
+      const intervalField = pathStr.replace(/\.duration$/, "");
+      const intervalVal = this.resolvePathValue(resourceId, record, intervalField);
+      return getIntervalDuration(intervalVal);
+    }
+    const parts = pathStr.split(".");
+    let currentResourceId = resourceId;
+    let current = record;
+    for (let index = 0; index < parts.length; index += 1) {
+      const seg = parts[index];
+      const resource = currentResourceId ? this.model.entities.get(currentResourceId) : null;
+      const field = resource?.fieldMap?.get(seg);
+      let value = current?.[seg];
+      if (value === undefined && field?.computed) {
+        value = this.computedValue(field, current, currentResourceId);
+      }
+      if (index === parts.length - 1) {
+        if (field?.type === "rate") {
+          return new MoneyRate(value, field.currency, field.unit);
+        }
+        return value;
+      }
+      if (isBlank(value)) return null;
+      currentResourceId = field?.ref ?? null;
+      if (!currentResourceId) return null;
+      current = this.records(currentResourceId).find((candidate) => candidate.id === value);
+      if (!current) return null;
+    }
+    return null;
+  }
+
   computedValue(field, ownerRecord, ownerResourceId = null) {
     const definition = field.computed;
     if (definition.kind === "workflow") return this.workflowStatus(ownerResourceId, ownerRecord)?.status ?? "";
+    if (definition.kind === "interval") {
+      return {
+        start: ownerRecord[definition.start],
+        end: ownerRecord[definition.end],
+        policy: definition.policy ?? "[start,end)"
+      };
+    }
+    if (definition.kind === "interval_duration") {
+      const intervalVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.intervalField);
+      return getIntervalDuration(intervalVal);
+    }
+    if (definition.kind === "product") {
+      const leftVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.left);
+      const rightVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.right);
+      let durationMs = null;
+      let rateObj = null;
+
+      if (leftVal instanceof Duration) durationMs = leftVal.ms;
+      else if (typeof leftVal === "object" && leftVal && leftVal.start && leftVal.end) durationMs = getIntervalDuration(leftVal)?.ms ?? null;
+      
+      if (rightVal instanceof Duration) durationMs = rightVal.ms;
+      else if (typeof rightVal === "object" && rightVal && rightVal.start && rightVal.end) durationMs = getIntervalDuration(rightVal)?.ms ?? null;
+
+      if (leftVal instanceof MoneyRate) rateObj = leftVal;
+      if (rightVal instanceof MoneyRate) rateObj = rightVal;
+
+      if (durationMs == null || rateObj == null) {
+        throw new AirError(`computed product \`${field.address}\` requires a duration and a rate`);
+      }
+
+      if (field.currency && rateObj.currency && field.currency !== rateObj.currency) {
+        throw new AirError(`computed money field \`${field.address}\` currency \`${field.currency}\` does not match rate currency \`${rateObj.currency}\``);
+      }
+
+      const res = multiplyMoneyRate(rateObj.amount, rateObj.currency, durationMs, rateObj.unit);
+      return res ? res.amount : 0;
+    }
+    if (definition.kind === "expression") {
+      return this.resolvePathValue(ownerResourceId, ownerRecord, definition.source);
+    }
     let records = this.records(definition.source)
       .filter((record) => !record._archived_at)
       .filter((record) => this.can(definition.source, "view", record))
@@ -1971,9 +2911,30 @@ export class AppRuntime {
       records = records.filter((record) => String(record[definition.date] ?? "").slice(0, 7) === month);
     }
     if (definition.op === "count") return records.length;
+    const isDurationField = definition.field?.endsWith(".duration") || this.model.entities.get(definition.source)?.fieldMap?.get(definition.field)?.type === "duration";
+    if (isDurationField) {
+      const durValues = records.map((record) => {
+        const val = this.resolvePathValue(definition.source, record, definition.field);
+        if (val instanceof Duration) return val.ms;
+        if (typeof val === "object" && val && val.start && val.end) return getIntervalDuration(val)?.ms ?? null;
+        if (typeof val === "number") return val;
+        const parsed = parseDurationLiteral(val);
+        return parsed ? parsed.ms : null;
+      }).filter((v) => v !== null && Number.isFinite(v));
+      if (!durValues.length) return new Duration(0);
+      if (definition.op === "sum") return new Duration(durValues.reduce((t, v) => t + v, 0));
+      if (definition.op === "average" || definition.op === "avg") {
+        const sumMs = durValues.reduce((t, v) => t + v, 0);
+        return new Duration(roundSymmetricRational(sumMs, durValues.length));
+      }
+      if (definition.op === "min") return new Duration(Math.min(...durValues));
+      if (definition.op === "max") return new Duration(Math.max(...durValues));
+    }
     const values = records.map((record) => Number(record[definition.field])).filter(Number.isFinite);
     if (definition.op === "sum") return values.reduce((total, value) => total + value, 0);
-    if (definition.op === "average") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+    if (definition.op === "average" || definition.op === "avg") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+    if (definition.op === "min") return values.length ? Math.min(...values) : 0;
+    if (definition.op === "max") return values.length ? Math.max(...values) : 0;
     throw new AirError(`unknown computed operation \`${definition.op}\``);
   }
 
@@ -1993,27 +2954,172 @@ export class AppRuntime {
 
   highlight(resourceId, record) {
     return (this.model.highlights.get(resourceId) ?? [])
-      .find((item) => String(record[item.when.field] ?? "") === item.when.value)?.tone ?? null;
+      .find((item) => item.when.alternatives
+        ? this.evaluateCondition(item.when, resourceId, record)
+        : String(record[item.when.field] ?? "") === item.when.value)?.tone ?? null;
   }
 
   metric(metric) {
-    let records = this.query(metric.source, { paginate: false }).records;
+    let records;
+    let sourceResourceId = metric.source;
+    const isEventSource = metric.source.startsWith("events.");
+    if (isEventSource) {
+      sourceResourceId = metric.source.slice(7);
+      records = this.events(sourceResourceId);
+    } else {
+      records = this.query(metric.source, { paginate: false }).records;
+    }
+
+    // 1. Event duration correlation (e.g. Open -> Resolved, Submitted -> Approved)
+    if (isEventSource && metric.from && metric.to) {
+      const parentRecords = this.records(sourceResourceId).filter((rec) => !rec._archived_at);
+      let correlated = parentRecords.map((rec) => {
+        const dur = correlateEventDurations(rec._air_history ?? [], metric.from, metric.to);
+        return { record: rec, duration: dur };
+      }).filter((item) => item.duration !== null);
+
+      if (metric.where) {
+        correlated = metric.where.alternatives
+          ? correlated.filter((item) => this.evaluateCondition(metric.where, sourceResourceId, item.record))
+          : correlated.filter((item) => String(item.record[metric.where.field] ?? "") === metric.where.value);
+      }
+
+      const aggregateDurations = (items) => {
+        if (metric.op === "count") return items.length;
+        const durMsList = items.map((i) => i.duration.ms).filter(Number.isFinite);
+        if (!durMsList.length) return (metric.op === "avg" || metric.op === "average" || metric.op === "sum" || metric.op === "min" || metric.op === "max") ? new Duration(0) : 0;
+        if (metric.op === "sum") return new Duration(durMsList.reduce((a, b) => a + b, 0));
+        if (metric.op === "avg" || metric.op === "average") {
+          const sumMs = durMsList.reduce((a, b) => a + b, 0);
+          return new Duration(roundSymmetricRational(sumMs, durMsList.length));
+        }
+        if (metric.op === "min") return new Duration(Math.min(...durMsList));
+        if (metric.op === "max") return new Duration(Math.max(...durMsList));
+        throw new AirError(`unknown event duration metric operation \`${metric.op}\``);
+      };
+
+      if (metric.group) {
+        const groups = new Map();
+        for (const item of correlated) {
+          const key = this.displayValue(sourceResourceId, metric.group, item.record[metric.group]);
+          const list = groups.get(key) ?? [];
+          list.push(item);
+          groups.set(key, list);
+        }
+        return Object.fromEntries([...groups].sort(([l], [r]) => l.localeCompare(r)).map(([k, v]) => [k, aggregateDurations(v)]));
+      }
+      return aggregateDurations(correlated);
+    }
+
+    // 2. Generic Resource Utilization
+    if (metric.op === "utilization") {
+      let activeRecords = records;
+      if (metric.where) {
+        activeRecords = metric.where.alternatives
+          ? activeRecords.filter((record) => this.evaluateCondition(metric.where, sourceResourceId, record))
+          : activeRecords.filter((record) => String(record[metric.where.field] ?? "") === metric.where.value);
+      }
+      const intervalField = metric.overlaps || metric.field || "booking_period";
+      
+      let windowStart = null;
+      let windowEnd = null;
+      if (metric.window) {
+        if (metric.window.includes("..")) {
+          const [wS, wE] = metric.window.split("..");
+          windowStart = wS.trim();
+          windowEnd = wE.trim();
+        } else if (metric.window === "month") {
+          const nowStr = this.clock().toISOString();
+          const yearMonth = nowStr.slice(0, 7);
+          windowStart = `${yearMonth}-01T00:00:00.000Z`;
+          const d = new Date(windowStart);
+          d.setUTCMonth(d.getUTCMonth() + 1);
+          windowEnd = d.toISOString();
+        } else {
+          const dur = parseDurationLiteral(metric.window);
+          if (dur) {
+            windowEnd = this.clock().toISOString();
+            windowStart = new Date(this.clock().getTime() - dur.ms).toISOString();
+          }
+        }
+      }
+      if (!windowStart || !windowEnd) {
+        const todayStr = this.currentDate();
+        windowStart = `${todayStr}T00:00:00.000Z`;
+        const d = new Date(windowStart);
+        d.setUTCDate(d.getUTCDate() + 1);
+        windowEnd = d.toISOString();
+      }
+
+      if (metric.group) {
+        const groups = new Map();
+        for (const record of activeRecords) {
+          const key = this.displayValue(sourceResourceId, metric.group, record[metric.group]);
+          const list = groups.get(key) ?? [];
+          list.push(record);
+          groups.set(key, list);
+        }
+        return Object.fromEntries(
+          [...groups].sort(([l], [r]) => l.localeCompare(r)).map(([k, groupRecs]) => [
+            k,
+            computeUtilization(groupRecs, intervalField, windowStart, windowEnd)
+          ])
+        );
+      }
+      return computeUtilization(activeRecords, intervalField, windowStart, windowEnd);
+    }
+
+    // 3. Standard records or events aggregation
     if (metric.where) {
       records = metric.where.alternatives
-        ? records.filter((record) => this.evaluateCondition(metric.where, metric.source, record))
+        ? records.filter((record) => this.evaluateCondition(metric.where, sourceResourceId, record))
         : records.filter((record) => String(record[metric.where.field] ?? "") === metric.where.value);
     }
+
+    const sourceEntity = this.model.entities.get(sourceResourceId);
+    const fieldDef = metric.field ? (sourceEntity?.fieldMap?.get(metric.field) ?? null) : null;
+    const isDurationField = fieldDef?.type === "duration" || metric.field?.endsWith(".duration") || fieldDef?.type === "interval";
+
     const aggregate = (items) => {
       if (metric.op === "count") return items.length;
+      if (isDurationField) {
+        const durValues = items.map((record) => {
+          const val = this.resolvePathValue(sourceResourceId, record, metric.field);
+          if (val instanceof Duration) return val.ms;
+          if (typeof val === "object" && val && val.start && val.end) return getIntervalDuration(val)?.ms ?? null;
+          if (typeof val === "number") return val;
+          const parsed = parseDurationLiteral(val);
+          return parsed ? parsed.ms : null;
+        }).filter((v) => v !== null && Number.isFinite(v));
+
+        if (!durValues.length) return new Duration(0);
+        if (metric.op === "sum") return new Duration(durValues.reduce((a, b) => a + b, 0));
+        if (metric.op === "average" || metric.op === "avg") {
+          const sumMs = durValues.reduce((a, b) => a + b, 0);
+          return new Duration(roundSymmetricRational(sumMs, durValues.length));
+        }
+        if (metric.op === "min") return new Duration(Math.min(...durValues));
+        if (metric.op === "max") return new Duration(Math.max(...durValues));
+        throw new AirError(`unknown metric operation \`${metric.op}\``);
+      }
+
       const values = items.map((record) => Number(record[metric.field])).filter(Number.isFinite);
       if (metric.op === "sum") return values.reduce((total, value) => total + value, 0);
-      if (metric.op === "average") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+      if (metric.op === "average" || metric.op === "avg") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+      if (metric.op === "min") return values.length ? Math.min(...values) : 0;
+      if (metric.op === "max") return values.length ? Math.max(...values) : 0;
       throw new AirError(`unknown metric operation \`${metric.op}\``);
     };
+
     if (metric.group) {
       const groups = new Map();
       for (const record of records) {
-        const key = this.displayValue(metric.source, metric.group, record[metric.group]);
+        let key;
+        if (metric.source.startsWith("events.")) {
+          key = String(record[metric.group] ?? "—");
+        } else {
+          key = this.displayValue(metric.source, metric.group, record[metric.group]);
+        }
         const values = groups.get(key) ?? [];
         values.push(record);
         groups.set(key, values);
@@ -2024,10 +3130,36 @@ export class AppRuntime {
   }
 
   formatMetric(metric, value) {
-    if (metric.format === "breakdown") return Object.entries(value).map(([key, count]) => `${key} ${new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(count)}`).join(" · ") || "—";
+    if (metric.format === "breakdown") {
+      return Object.entries(value).map(([key, count]) => {
+        let formattedVal;
+        if (count instanceof Duration) formattedVal = count.toString();
+        else if (count instanceof UtilizationRatio) formattedVal = count.toString();
+        else if (metric.op === "utilization" || metric.format === "percentage" || metric.format === "percent") {
+          formattedVal = `${Math.round(typeof count === "number" && count <= 1 && count > 0 ? count * 100 : Number(count))}%`;
+        } else {
+          formattedVal = new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(count);
+        }
+        return `${key} ${formattedVal}`;
+      }).join(" · ") || "—";
+    }
+    if (value instanceof Duration) {
+      return value.toString();
+    }
+    if (value instanceof UtilizationRatio) {
+      return value.toString();
+    }
+    if (metric.op === "utilization" || metric.format === "percentage" || metric.format === "percent") {
+      const pct = typeof value === "number" && value <= 1 && value > 0 ? value * 100 : Number(value);
+      return `${Math.round(pct)}%`;
+    }
     if (metric.format === "money") {
-      const field = this.model.entities.get(metric.source).fieldMap.get(metric.field);
-      return new Intl.NumberFormat("en", { style: "currency", currency: field.currency, maximumFractionDigits: 0 }).format(value);
+      const field = this.model.entities.get(metric.source)?.fieldMap?.get(metric.field);
+      return new Intl.NumberFormat("en", { style: "currency", currency: field?.currency ?? "USD", maximumFractionDigits: 0 }).format(value);
+    }
+    if (metric.format === "duration") {
+      const dur = parseDurationLiteral(value);
+      if (dur) return dur.toString();
     }
     return new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(value);
   }
@@ -2045,9 +3177,23 @@ export class AppRuntime {
     }
     if (field.type === "bool") return value ? "Yes" : "No";
     if (field.type === "money") return new Intl.NumberFormat("en", { style: "currency", currency: field.currency }).format(value);
+    if (field.type === "rate") {
+      const formatted = new Intl.NumberFormat("en", { style: "currency", currency: field.currency }).format(value);
+      return `${formatted}/${field.unit}`;
+    }
+    if (field.type === "duration") {
+      if (value instanceof Duration) return value.toString();
+      const dur = parseDurationLiteral(value);
+      if (dur) return dur.toString();
+      return String(value);
+    }
     if (field.type === "date") {
       const date = new Date(`${value}T00:00:00Z`);
       if (!Number.isNaN(date.valueOf())) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
+    }
+    if (field.type === "datetime") {
+      const date = new Date(value);
+      if (!Number.isNaN(date.valueOf())) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "numeric", timeZone: "UTC" }).format(date);
     }
     return String(value);
   }
@@ -2288,7 +3434,11 @@ export function semanticIr(input) {
         sort: [...page.sort], pageSize: page.pageSize
       } : null,
       highlights: (model.highlights.get(resource.id) ?? []).map((highlight) => ({
-        id: highlight.id, field: highlight.when.field, value: highlight.when.value, tone: highlight.tone
+        id: highlight.id,
+        condition: highlight.when?.alternatives ? canonicalCondition(highlight.when) : null,
+        field: highlight.when?.field ?? null,
+        value: highlight.when?.value ?? null,
+        tone: highlight.tone
       }))
     };
   });
@@ -2327,7 +3477,13 @@ export function semanticIr(input) {
   return {
     schema: "air.semantic-ir",
     version: 2,
-    app: { id: model.app.id, title: model.app.title, subtitle: model.app.subtitle, initial: model.app.initial },
+    app: {
+      id: model.app.id,
+      title: model.app.title,
+      subtitle: model.app.subtitle,
+      initial: model.app.initial,
+      ...(model.app.timezone && model.app.timezone !== "UTC" ? { timezone: model.app.timezone } : {})
+    },
     theme: { mode: model.theme.mode, accent: model.theme.accent, density: model.theme.density },
     capabilities: sortedUnique([...model.capabilities]),
     resources,
@@ -2415,7 +3571,7 @@ export function explainModel(input) {
       if (field.computed.kind === "workflow") lines.push(`  Computed ${field.label}: derived from the active process deadline`);
       else lines.push(`  Computed ${field.label}: ${field.computed.op} ${field.computed.source} grouped by ${field.computed.group}${field.computed.where ? ` where ${field.computed.where.source}` : ""}${field.computed.window ? ` in the current ${field.computed.window}` : ""}`);
     }
-    for (const highlight of model.highlights.get(resource.id) ?? []) lines.push(`  Highlight ${highlight.id}: ${highlight.when.field}=${highlight.when.value} as ${highlight.tone}`);
+    for (const highlight of model.highlights.get(resource.id) ?? []) lines.push(`  Highlight ${highlight.id}: ${highlight.when.field ? `${highlight.when.field}=${highlight.when.value}` : highlight.when.source} as ${highlight.tone}`);
   }
   for (const rule of model.rules) lines.push(`- Rule ${rule.address}: ${rule.field} changes ${rule.from} -> ${rule.to} after ${rule.duration.source} from ${rule.since}`);
   for (const [resourceId, parameters] of model.parameters) {
@@ -2431,8 +3587,13 @@ export function explainModel(input) {
       lines.push(`  ${transition.from.join(" or ")} -> ${transition.to}: ${transition.automatic ? "automatic" : `action ${transition.action} by ${authority}`}${condition}${approval}${separation}; emits ${transition.event}`);
     }
     for (const invariant of process.invariants) {
-      const effects = [invariant.required.length ? `requires ${invariant.required.join(", ")}` : "", invariant.immutable.length ? `locks ${invariant.immutable.join(", ")}` : ""].filter(Boolean).join(" and ");
-      lines.push(`  Invariant ${invariant.id}: ${effects} when ${invariant.when.source}`);
+      const effects = [
+        invariant.required?.length ? `requires ${invariant.required.join(", ")}` : "",
+        invariant.immutable?.length ? `locks ${invariant.immutable.join(", ")}` : "",
+        invariant.none ? `forbids overlap with ${invariant.none}` : "",
+        invariant.deny ? `denies: ${invariant.deny}` : ""
+      ].filter(Boolean).join(" and ");
+      lines.push(`  Invariant ${invariant.id}: ${effects}${invariant.when ? ` when ${invariant.when.source}` : ""}`);
     }
     for (const deadline of process.deadlines) lines.push(`  Deadline ${deadline.state}: ${deadline.duration.source}; escalation ${deadline.escalation}`);
   }
@@ -2440,6 +3601,230 @@ export function explainModel(input) {
     for (const metric of page.metrics.filter((candidate) => !candidate.inferred)) lines.push(`- Insight ${metric.address}: ${metric.op} ${metric.source}.${metric.field ?? "records"}`);
   }
   return lines.join("\n");
+}
+
+function toIntervalBounds(input) {
+  if (!input) return null;
+  let start = null;
+  let end = null;
+  if (Array.isArray(input)) {
+    start = input[0];
+    end = input[1];
+  } else if (typeof input === "object") {
+    start = input.start ?? input.start_at ?? input.from;
+    end = input.end ?? input.end_at ?? input.to;
+  }
+  if (start == null || end == null) return null;
+  if (typeof start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(start) &&
+      typeof end === "string" && /^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    if (start === end) {
+      const d = new Date(`${start}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      const nextDay = d.toISOString().slice(0, 10);
+      return { start, end: nextDay };
+    }
+  }
+  return { start, end };
+}
+
+function normalizeInstantToIso(val) {
+  if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return `${val}T00:00:00.000Z`;
+  }
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
+
+export function clipInterval(interval, window) {
+  const bI = toIntervalBounds(interval);
+  const bW = toIntervalBounds(window);
+  if (!bI || !bW) return null;
+  const iStart = normalizeInstantToIso(bI.start);
+  const iEnd = normalizeInstantToIso(bI.end);
+  const wStart = normalizeInstantToIso(bW.start);
+  const wEnd = normalizeInstantToIso(bW.end);
+
+  const start = iStart > wStart ? iStart : wStart;
+  const end = iEnd < wEnd ? iEnd : wEnd;
+  if (start >= end) return null;
+  return { start, end };
+}
+
+export function intervalUnion(intervals) {
+  if (!Array.isArray(intervals) || intervals.length === 0) return [];
+  const validBounds = intervals
+    .map((iv) => {
+      const b = toIntervalBounds(iv);
+      if (!b || !b.start || !b.end) return null;
+      const start = normalizeInstantToIso(b.start);
+      const end = normalizeInstantToIso(b.end);
+      if (start >= end) return null;
+      return { start, end };
+    })
+    .filter(Boolean);
+
+  if (validBounds.length === 0) return [];
+
+  validBounds.sort((a, b) => {
+    const sCmp = a.start.localeCompare(b.start);
+    if (sCmp !== 0) return sCmp;
+    return a.end.localeCompare(b.end);
+  });
+
+  const merged = [validBounds[0]];
+  for (let i = 1; i < validBounds.length; i++) {
+    const curr = validBounds[i];
+    const prev = merged[merged.length - 1];
+    if (curr.start <= prev.end) {
+      if (curr.end > prev.end) {
+        prev.end = curr.end;
+      }
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+}
+
+export function computeUtilization(records, intervalFieldOrPath, windowStart, windowEnd) {
+  const windowDur = subtractInstants(windowEnd, windowStart);
+  if (!windowDur || windowDur.ms <= 0) return new UtilizationRatio(0, 1);
+
+  const window = { start: windowStart, end: windowEnd };
+  const clippedIntervals = [];
+
+  for (const record of records) {
+    if (record._archived_at) continue;
+    let rawInterval = null;
+    if (typeof intervalFieldOrPath === "function") {
+      rawInterval = intervalFieldOrPath(record);
+    } else if (typeof intervalFieldOrPath === "string") {
+      if (intervalFieldOrPath.endsWith(".duration")) {
+        const fieldName = intervalFieldOrPath.replace(/\.duration$/, "");
+        rawInterval = record[fieldName];
+      } else {
+        rawInterval = record[intervalFieldOrPath];
+      }
+    }
+    if (!rawInterval) {
+      if (record.start_at && record.end_at) {
+        rawInterval = { start: record.start_at, end: record.end_at };
+      }
+    }
+    if (rawInterval) {
+      const clipped = clipInterval(rawInterval, window);
+      if (clipped) clippedIntervals.push(clipped);
+    }
+  }
+
+  const union = intervalUnion(clippedIntervals);
+  let occupiedMs = 0;
+  for (const iv of union) {
+    const dur = subtractInstants(iv.end, iv.start);
+    if (dur && dur.ms > 0) {
+      occupiedMs += dur.ms;
+    }
+  }
+
+  return new UtilizationRatio(occupiedMs, windowDur.ms);
+}
+
+export function correlateEventDurations(historyOrEvents, fromEventOrState, toEventOrState) {
+  if (!Array.isArray(historyOrEvents) || historyOrEvents.length === 0) return null;
+  const history = [...historyOrEvents].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+
+  const fromEntry = history.find((entry) => 
+    entry.event === fromEventOrState || 
+    entry.to === fromEventOrState || 
+    entry.action === fromEventOrState ||
+    (fromEventOrState === "created" && (entry.event === "created" || entry.action === "create"))
+  );
+  if (!fromEntry || !fromEntry.at) return null;
+
+  const fromIdx = history.indexOf(fromEntry);
+  const toEntry = history.slice(fromIdx + 1).find((entry) =>
+    entry.event === toEventOrState ||
+    entry.to === toEventOrState ||
+    entry.action === toEventOrState
+  );
+  if (!toEntry || !toEntry.at) return null;
+
+  return subtractInstants(toEntry.at, fromEntry.at);
+}
+
+export function getIntervalDuration(interval) {
+  if (!interval) return null;
+  if (interval instanceof Duration) return interval;
+  const b = toIntervalBounds(interval);
+  if (b && b.start && b.end) {
+    return subtractInstants(b.end, b.start);
+  }
+  return null;
+}
+
+export function intervalsOverlap(a, b) {
+  const bA = toIntervalBounds(a);
+  const bB = toIntervalBounds(b);
+  if (!bA || !bB) return false;
+  return bA.start < bB.end && bA.end > bB.start;
+}
+
+export function intervalContains(a, b) {
+  const bA = toIntervalBounds(a);
+  const bB = toIntervalBounds(b);
+  if (!bA || !bB) return false;
+  return bA.start <= bB.start && bA.end >= bB.end;
+}
+
+export function intervalContainedBy(a, b) {
+  return intervalContains(b, a);
+}
+
+export function intervalBefore(a, b) {
+  const bA = toIntervalBounds(a);
+  const bB = toIntervalBounds(b);
+  if (!bA || !bB) return false;
+  return bA.end <= bB.start;
+}
+
+export function intervalAfter(a, b) {
+  const bA = toIntervalBounds(a);
+  const bB = toIntervalBounds(b);
+  if (!bA || !bB) return false;
+  return bA.start >= bB.end;
+}
+
+export function intervalTouches(a, b) {
+  const bA = toIntervalBounds(a);
+  const bB = toIntervalBounds(b);
+  if (!bA || !bB) return false;
+  return bA.end === bB.start || bB.end === bA.start;
+}
+
+export function duration(startOrInterval, end = null, unit = "h") {
+  let s = startOrInterval;
+  let e = end;
+  let u = unit;
+  if (typeof startOrInterval === "object" && startOrInterval !== null && end === null) {
+    s = startOrInterval.start ?? startOrInterval.start_at ?? startOrInterval.from;
+    e = startOrInterval.end ?? startOrInterval.end_at ?? startOrInterval.to;
+  } else if (typeof end === "string" && ["h", "d", "m", "s", "hours", "days", "minutes", "seconds"].includes(end)) {
+    u = end;
+    if (typeof startOrInterval === "object" && startOrInterval !== null) {
+      s = startOrInterval.start ?? startOrInterval.start_at ?? startOrInterval.from;
+      e = startOrInterval.end ?? startOrInterval.end_at ?? startOrInterval.to;
+    }
+  }
+  if (s == null || e == null) return 0;
+  const t1 = typeof s === "number" ? s : Date.parse(String(s).includes("T") ? s : `${s}T00:00:00Z`);
+  const t2 = typeof e === "number" ? e : Date.parse(String(e).includes("T") ? e : `${e}T00:00:00Z`);
+  if (!Number.isFinite(t1) || !Number.isFinite(t2)) return 0;
+  const ms = t2 - t1;
+  if (u === "d" || u === "days") return ms / 86_400_000;
+  if (u === "h" || u === "hours") return ms / 3_600_000;
+  if (u === "m" || u === "minutes") return ms / 60_000;
+  if (u === "s" || u === "seconds") return ms / 1_000;
+  return ms;
 }
 
 export function workflowDiagram(input) {

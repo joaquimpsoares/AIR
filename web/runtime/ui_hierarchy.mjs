@@ -84,6 +84,80 @@ export const SHELL_REPRESENTATION = Object.freeze({
   PUBLIC_COMPACT: "public_compact"
 });
 
+export const FEATURE_STORY_REPRESENTATION = Object.freeze({
+  ASYMMETRIC_BENTO: "asymmetric_bento",
+  BALANCED_GRID: "balanced_grid",
+  NARRATIVE_STACK: "narrative_stack"
+});
+
+export const DASHBOARD_REPRESENTATION = Object.freeze({
+  DASHBOARD_GRID: "dashboard_grid",
+  DASHBOARD_CONDENSED: "dashboard_condensed",
+  DASHBOARD_STACK: "dashboard_stack"
+});
+
+export const PROOF_REPRESENTATION = Object.freeze({
+  PROOF_BAND: "proof_band",
+  PROOF_STACK: "proof_stack"
+});
+
+export const PRICING_REPRESENTATION = Object.freeze({
+  COMPARISON_GRID: "comparison_grid",
+  SEQUENTIAL_PLANS: "sequential_plans"
+});
+
+export const PRODUCT_STORY_REPRESENTATION = Object.freeze({
+  SPLIT_STORY: "split_story",
+  NARRATIVE_STACK: "narrative_stack"
+});
+
+export const DRAWER_REPRESENTATION = Object.freeze({
+  RIGHT_DRAWER: "right_drawer",
+  WIDE_SHEET: "wide_sheet",
+  FULL_SCREEN_SHEET: "full_screen_sheet"
+});
+
+export const DRAWER_SIZE = Object.freeze({
+  COMPACT: "compact",     // 380px max-width on desktop
+  STANDARD: "standard",   // 480px max-width on desktop
+  WIDE: "wide"            // 640px max-width on desktop
+});
+
+export const DRAWER_STACK_POLICY = "single_primary_replace";
+
+export const MENU_REPRESENTATION = Object.freeze({
+  TOP_POPOVER: "top_popover",
+  DROPDOWN: "dropdown",
+  OVERFLOW_MENU: "overflow_menu",
+  COMPACT_SHEET: "compact_sheet"
+});
+
+/**
+ * Section Rhythm & Inter-Section Spacing Constants
+ */
+export const SECTION_RHYTHM = Object.freeze({
+  TIGHT: "tight",
+  COMPACT: "compact",
+  COMFORTABLE: "comfortable",
+  SPACIOUS: "spacious",
+  DRAMATIC: "dramatic"
+});
+
+export const SECTION_RELATIONSHIP = Object.freeze({
+  INDEPENDENT: "independent",
+  GROUPED: "grouped",
+  CONTINUOUS: "continuous",
+  ATTACHED: "attached"
+});
+
+export const SECTION_RHYTHM_VALUES = Object.freeze({
+  [SECTION_RHYTHM.TIGHT]: { rem: 0.5, px: 8 },
+  [SECTION_RHYTHM.COMPACT]: { rem: 1.0, px: 16 },
+  [SECTION_RHYTHM.COMFORTABLE]: { rem: 1.75, px: 28 },
+  [SECTION_RHYTHM.SPACIOUS]: { rem: 3.0, px: 48 },
+  [SECTION_RHYTHM.DRAMATIC]: { rem: 4.5, px: 72 }
+});
+
 /**
  * 1. UI EXPERIENCES CATALOG
  */
@@ -94,6 +168,7 @@ export const UI_EXPERIENCES = Object.freeze({
     description: "Public editorial narrative designed for product reveals, conversion, and architecture trust.",
     defaultShell: "public",
     defaultRhythm: "editorial",
+    defaultSectionRhythm: "spacious",
     density: "comfortable",
     defaultSections: [
       { role: "hero", priority: "primary" },
@@ -119,6 +194,7 @@ export const UI_EXPERIENCES = Object.freeze({
     description: "High-density productivity application with dashboard metrics, resource collections, and workflow queues.",
     defaultShell: "authenticated_sidebar",
     defaultRhythm: "structured_grid",
+    defaultSectionRhythm: "comfortable",
     density: "compact",
     defaultSections: [
       { role: "dashboard", priority: "primary" },
@@ -141,6 +217,7 @@ export const UI_EXPERIENCES = Object.freeze({
     description: "Full-lifecycle CRUD data management with search, multi-filter, pagination, and detail drawers.",
     defaultShell: "authenticated_sidebar",
     defaultRhythm: "structured_panel",
+    defaultSectionRhythm: "comfortable",
     density: "comfortable",
     defaultSections: [
       { role: "collection", priority: "primary" },
@@ -522,6 +599,34 @@ export const UI_SECTIONS = Object.freeze({
       ios: { view: "ScrollView", subviews: ["Form", "Section"] },
       android: { composable: "Column", modifier: "verticalScroll" }
     }
+  },
+
+  data_story: {
+    id: "data_story",
+    title: "Visual Data Story & Insights Section",
+    role: "data_story",
+    description: "Analytical insights and metric trends composing line, bar, area, stacked, and scatter visualizations with exact accessible data tables.",
+    requiredArtifacts: ["data_visualization"],
+    composedArtifacts: ["data_visualization", "metric", "filters"],
+    allowedCompositions: ["grid", "stack", "split"],
+    responsivePolicy: {
+      wide: "2-column visualization grid with full multi-series charts",
+      medium: "2-column condensed grid",
+      narrow: "1-column stack with compact representations and horizontal bars",
+      containerQuery: true,
+      minViableWidth: 320
+    },
+    accessibility: {
+      landmark: "region",
+      ariaRole: "region",
+      headingLevel: "h2",
+      liveRegion: "polite"
+    },
+    platformMappings: {
+      web: { tag: "section", baseClasses: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
+      ios: { view: "LazyVGrid", columns: "adaptive" },
+      android: { composable: "LazyVerticalGrid", columns: "Adaptive" }
+    }
   }
 });
 
@@ -808,6 +913,130 @@ export const UI_ARTIFACTS = Object.freeze({
       ios: { component: "ContentUnavailableView", modifiers: [] },
       android: { component: "EmptyContentPlaceholder", modifiers: ["Modifier.fillMaxSize()"] }
     }
+  },
+
+  data_visualization: {
+    id: "data_visualization",
+    title: "Compiler-Native Data Visualization",
+    description: "Visual data chart (line, area, bar, stacked, scatter, sparkline) compiled directly from analytical intent with exact accessible data tables.",
+    requires: ["intent", "measure", "dimension"],
+    provides: ["exact_table_toggle", "data_point_focus", "trend_inspection"],
+    states: [ARTIFACT_STATES.IDLE, ARTIFACT_STATES.LOADING, ARTIFACT_STATES.EMPTY, ARTIFACT_STATES.FILTERED_EMPTY, ARTIFACT_STATES.ERROR],
+    responsivePolicy: {
+      wide: { mode: "full_chart", legend: "inline", points: "all" },
+      medium: { mode: "compact_chart", legend: "inline", points: "all" },
+      narrow: { mode: "horizontal_or_sparkline", legend: "subdued", points: "decimated" },
+      containerBreakpoints: {
+        full: 640,
+        compact: 380,
+        sparkline: 0
+      }
+    },
+    accessibilityPolicy: {
+      role: "region",
+      keyboardAccessible: true,
+      hasDataTableAlternative: true,
+      liveRegion: "polite"
+    },
+    platformMappings: {
+      web: { component: "DataVisualizationPanel", tailwind: "p-6 rounded-2xl bg-slate-900 border border-slate-800" },
+      ios: { component: "Charts.Chart", modifiers: [".chartLegend(.visible)"] },
+      android: { component: "DataVisualizationCanvas", modifiers: ["Modifier.fillMaxWidth()"] }
+    }
+  },
+
+  semantic_graph: {
+    id: "semantic_graph",
+    title: "Semantic Graph & Workflow Artifact",
+    description: "Structural relationship diagram for state machines, dependency DAGs, and event timelines.",
+    requires: ["mode", "nodes", "edges"],
+    provides: ["node_inspection", "state_transition", "linear_list_toggle"],
+    states: [ARTIFACT_STATES.IDLE, ARTIFACT_STATES.LOADING, ARTIFACT_STATES.EMPTY],
+    responsivePolicy: {
+      wide: { mode: "spatial_graph", edgeLabels: true },
+      medium: { mode: "compact_graph", edgeLabels: true },
+      narrow: { mode: "vertical_stepper_or_linear_flow", edgeLabels: false },
+      containerBreakpoints: {
+        spatial: 768,
+        compact: 480,
+        linear: 0
+      }
+    },
+    accessibilityPolicy: {
+      role: "region",
+      linearAlternative: true,
+      announceTransitions: true
+    },
+    platformMappings: {
+      web: { component: "SemanticGraphPanel", tailwind: "p-6 rounded-2xl bg-slate-900 border border-slate-800" },
+      ios: { component: "WorkflowGraphView", modifiers: [] },
+      android: { component: "WorkflowDiagram", modifiers: ["Modifier.fillMaxWidth()"] }
+    }
+  },
+
+  drawer: {
+    id: "drawer",
+    title: "Secondary Interaction Surface (Drawer / Sheet)",
+    category: "interaction_surface",
+    semanticLevel: "secondary_surface",
+    purposes: ["edit", "create", "detail", "filter", "workflow"],
+    stackPolicy: DRAWER_STACK_POLICY,
+    description: "Generic right-side sliding editor, detail inspector, or filter drawer on desktop; seamlessly transforms into full-screen sheet on mobile viewports.",
+    requires: ["purpose", "content", "onClose"],
+    provides: ["dismiss", "action_trigger", "form_submit", "detail_transition"],
+    states: [ARTIFACT_STATES.IDLE, ARTIFACT_STATES.LOADING, ARTIFACT_STATES.ERROR],
+    responsivePolicy: {
+      wide: { representation: DRAWER_REPRESENTATION.RIGHT_DRAWER, animation: "slide_right" },
+      medium: { representation: DRAWER_REPRESENTATION.RIGHT_DRAWER, animation: "slide_right" },
+      narrow: { representation: DRAWER_REPRESENTATION.FULL_SCREEN_SHEET, animation: "slide_up" },
+      containerBreakpoints: {
+        desktop_drawer: 640,
+        mobile_sheet: 0
+      }
+    },
+    accessibilityPolicy: {
+      role: "dialog",
+      ariaModal: true,
+      focusTrap: true,
+      closeOnEscape: true,
+      restoreFocus: true
+    },
+    platformMappings: {
+      web: { component: "RightDrawerOrSheet", tailwind: "fixed inset-y-0 right-0 z-50 flex flex-col bg-slate-900 border-l border-slate-800" },
+      ios: { component: "NavigationStackWithSheet", modifiers: [".sheet(isPresented:)"] },
+      android: { component: "ModalNavigationDrawerOrSheet", modifiers: ["Modifier.fillMaxHeight()"] }
+    }
+  },
+
+  menu: {
+    id: "menu",
+    title: "Contextual & Navigation Menu",
+    category: "contextual_navigation",
+    semanticLevel: "overlay",
+    description: "Adaptive popover, dropdown, or action sheet supporting top navigation, row actions, user switching, and overflow triggers.",
+    requires: ["items", "onSelect"],
+    provides: ["item_selection", "dismiss"],
+    states: [ARTIFACT_STATES.IDLE],
+    responsivePolicy: {
+      wide: { representation: MENU_REPRESENTATION.DROPDOWN, collisionCheck: true },
+      medium: { representation: MENU_REPRESENTATION.DROPDOWN, collisionCheck: true },
+      narrow: { representation: MENU_REPRESENTATION.COMPACT_SHEET, collisionCheck: false },
+      containerBreakpoints: {
+        dropdown: 640,
+        compact_sheet: 0
+      }
+    },
+    accessibilityPolicy: {
+      role: "menu",
+      itemRole: "menuitem",
+      keyboardNavigation: ["ArrowDown", "ArrowUp", "Home", "End", "Escape", "Enter", "Space"],
+      restoreFocus: true
+    },
+    platformMappings: {
+      web: { component: "DropdownOrPopoverMenu", tailwind: "absolute z-50 rounded-xl bg-slate-900 border border-slate-800 shadow-xl" },
+      ios: { component: "Menu", modifiers: [".menuStyle(.automatic)"] },
+      android: { component: "DropdownMenu", modifiers: ["Modifier.wrapContentSize()"] }
+    }
   }
 });
 
@@ -976,6 +1205,248 @@ export function resolveShellArtifactLayout(containerWidth = 1024, isPublic = fal
   }
   return {
     representation: containerWidth < 720 ? SHELL_REPRESENTATION.COMPACT : SHELL_REPRESENTATION.SIDEBAR
+  };
+}
+
+export function resolveFeatureStorySectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 1024) {
+    return {
+      representation: FEATURE_STORY_REPRESENTATION.ASYMMETRIC_BENTO,
+      dominantSpan: 7,
+      supportingSpan: 5,
+      columns: 12
+    };
+  }
+  if (containerWidth >= 640) {
+    return {
+      representation: FEATURE_STORY_REPRESENTATION.BALANCED_GRID,
+      dominantSpan: 6,
+      supportingSpan: 6,
+      columns: 2
+    };
+  }
+  return {
+    representation: FEATURE_STORY_REPRESENTATION.NARRATIVE_STACK,
+    dominantSpan: 1,
+    supportingSpan: 1,
+    columns: 1
+  };
+}
+
+export function resolveSocialProofSectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 768) {
+    return {
+      representation: PROOF_REPRESENTATION.PROOF_BAND,
+      statsColumns: 3,
+      quotesColumns: 2
+    };
+  }
+  return {
+    representation: PROOF_REPRESENTATION.PROOF_STACK,
+    statsColumns: 1,
+    quotesColumns: 1
+  };
+}
+
+export function resolvePricingSectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 768) {
+    return {
+      representation: PRICING_REPRESENTATION.COMPARISON_GRID,
+      columns: 3
+    };
+  }
+  return {
+    representation: PRICING_REPRESENTATION.SEQUENTIAL_PLANS,
+    columns: 1
+  };
+}
+
+export function resolveDashboardSectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 1024) {
+    return {
+      representation: DASHBOARD_REPRESENTATION.DASHBOARD_GRID,
+      metricsColumns: 4,
+      splitLayout: true
+    };
+  }
+  if (containerWidth >= 640) {
+    return {
+      representation: DASHBOARD_REPRESENTATION.DASHBOARD_CONDENSED,
+      metricsColumns: 2,
+      splitLayout: false
+    };
+  }
+  return {
+    representation: DASHBOARD_REPRESENTATION.DASHBOARD_STACK,
+    metricsColumns: 1,
+    splitLayout: false
+  };
+}
+
+export function resolveProductStorySectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 768) {
+    return {
+      representation: PRODUCT_STORY_REPRESENTATION.SPLIT_STORY,
+      columns: 2
+    };
+  }
+  return {
+    representation: PRODUCT_STORY_REPRESENTATION.NARRATIVE_STACK,
+    columns: 1
+  };
+}
+
+export function resolveDataStorySectionLayout(containerWidth = 1024) {
+  if (containerWidth >= 1024) {
+    return {
+      representation: "grid_2col",
+      columns: 2,
+      dense: false
+    };
+  }
+  if (containerWidth >= 640) {
+    return {
+      representation: "grid_2col_condensed",
+      columns: 2,
+      dense: true
+    };
+  }
+  return {
+    representation: "stack_1col",
+    columns: 1,
+    dense: true
+  };
+}
+
+export function resolveDataVisualizationLayout(intent, containerWidth = 1024, meta = {}) {
+  const isTimeSeries = meta.isTimeSeries || meta.dimension?.includes("date") || meta.dimension?.includes("month");
+  if (containerWidth < 380) {
+    return {
+      representation: isTimeSeries ? "sparkline_summary" : "compact_bar",
+      isCompact: true,
+      showLegend: false
+    };
+  }
+  if (containerWidth < 640) {
+    return {
+      representation: isTimeSeries ? "compact_line" : "horizontal_bar",
+      isCompact: true,
+      showLegend: true
+    };
+  }
+  return {
+    representation: isTimeSeries ? "full_line" : "vertical_bar",
+    isCompact: false,
+    showLegend: true
+  };
+}
+
+export function resolveSemanticGraphLayout(mode, containerWidth = 1024) {
+  if (containerWidth < 480) {
+    return {
+      representation: mode === "timeline" ? "vertical_timeline" : "vertical_state_path",
+      isLinear: true
+    };
+  }
+  if (containerWidth < 768) {
+    return {
+      representation: mode === "timeline" ? "vertical_timeline" : "compact_workflow_graph",
+      isLinear: false
+    };
+  }
+  return {
+    representation: mode === "timeline" ? "horizontal_timeline" : "spatial_workflow_graph",
+    isLinear: false
+  };
+}
+
+export function resolveDrawerArtifactLayout(containerWidth = 1024, size = DRAWER_SIZE.STANDARD) {
+  const isMobile = containerWidth < 640;
+  const isMedium = containerWidth >= 640 && containerWidth < 1024;
+  let representation = DRAWER_REPRESENTATION.RIGHT_DRAWER;
+  if (isMobile) {
+    representation = DRAWER_REPRESENTATION.FULL_SCREEN_SHEET;
+  } else if (isMedium && size === DRAWER_SIZE.WIDE) {
+    representation = DRAWER_REPRESENTATION.WIDE_SHEET;
+  }
+
+  const maxWidth = isMobile
+    ? "100%"
+    : (size === DRAWER_SIZE.COMPACT ? "380px" : (size === DRAWER_SIZE.WIDE ? "640px" : "480px"));
+  const widthPx = isMobile
+    ? containerWidth
+    : (size === DRAWER_SIZE.COMPACT ? 380 : (size === DRAWER_SIZE.WIDE ? 640 : 480));
+
+  return {
+    representation,
+    isMobile,
+    size,
+    maxWidth,
+    widthPx
+  };
+}
+
+export function resolveMenuArtifactLayout(containerWidth = 1024, context = "dropdown") {
+  const isMobile = containerWidth < 640;
+  let representation = MENU_REPRESENTATION.DROPDOWN;
+  if (isMobile) {
+    representation = MENU_REPRESENTATION.COMPACT_SHEET;
+  } else if (context === "top_nav" || context === "top_navigation") {
+    representation = MENU_REPRESENTATION.TOP_POPOVER;
+  } else if (context === "overflow") {
+    representation = MENU_REPRESENTATION.OVERFLOW_MENU;
+  }
+
+  return {
+    representation,
+    isMobile,
+    context
+  };
+}
+
+/**
+ * Structural Diagnostic for Independent Contained Section Surface Collisions.
+ *
+ * If two independent sibling sections have top/bottom bounding boxes closer than the
+ * minimum readable separation (< 12px), it flags SECTION_SURFACE_COLLISION unless explicitly
+ * declared grouped/continuous/attached.
+ */
+export function computeSectionSurfaceCollisionDiagnostic(sections = [], rhythm = SECTION_RHYTHM.COMFORTABLE) {
+  const collisions = [];
+  const expectedMinGap = SECTION_RHYTHM_VALUES[rhythm]?.px ?? 28;
+
+  for (let i = 0; i < sections.length - 1; i++) {
+    const curr = sections[i];
+    const next = sections[i + 1];
+
+    const isGrouped = curr.relationship === SECTION_RELATIONSHIP.GROUPED ||
+                      curr.relationship === SECTION_RELATIONSHIP.CONTINUOUS ||
+                      curr.relationship === SECTION_RELATIONSHIP.ATTACHED ||
+                      next.relationship === SECTION_RELATIONSHIP.GROUPED ||
+                      next.relationship === SECTION_RELATIONSHIP.CONTINUOUS ||
+                      next.relationship === SECTION_RELATIONSHIP.ATTACHED;
+
+    const currBottom = curr.bottom ?? (curr.top + (curr.height ?? 100));
+    const nextTop = next.top ?? 0;
+    const measuredGap = nextTop - currBottom;
+
+    if (!isGrouped && measuredGap < 12) {
+      collisions.push({
+        pair: [curr.id ?? `section-${i}`, next.id ?? `section-${i+1}`],
+        measuredGap,
+        expectedMinGap,
+        status: "SECTION_SURFACE_COLLISION",
+        reason: "Independent contained sibling sections are touching or below minimum readable separation."
+      });
+    }
+  }
+
+  return {
+    hasCollisions: collisions.length > 0,
+    collisionCount: collisions.length,
+    collisions,
+    rhythm,
+    status: collisions.length === 0 ? "PASS_CLEAN_SECTION_RHYTHM" : "FAIL_SECTION_SURFACE_COLLISION"
   };
 }
 

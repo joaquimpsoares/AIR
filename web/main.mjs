@@ -5,6 +5,7 @@ const demos = Object.freeze({
   customers: { label: "Northstar CRM", source: "../apps/customer-manager.air", seed: "../data/customer-manager.seed.json", principal: { roles: ["admin"] } },
   tasks: { label: "Lattice Tasks", source: "../apps/task-board.air", seed: "../data/task-board.seed.json", principal: { roles: ["admin"] } },
   expenses: { label: "Expense Approval", source: "../apps/expense-approval.air", seed: "../data/expense-approval.seed.json", principal: { actor: "users", id: "u_01", roles: ["employee"] } },
+  operations: { label: "Operations Hub", source: "../apps/operations-hub.air", seed: "../data/operations-hub.seed.json", principal: { roles: ["admin", "operator"] } },
   experience_demo: { label: "Experience Hub", source: "../apps/experience-demo.air", seed: "../data/experience-demo.seed.json", principal: null },
   landing: { label: "AIR Platform (Landing)", source: "../apps/landing-demo.air", seed: "../data/landing-demo.seed.json", principal: null }
 });

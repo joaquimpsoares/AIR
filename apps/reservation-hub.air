@@ -1,0 +1,83 @@
+air version=2
+app reservation_hub title="Reservation Hub" subtitle="Resource scheduling, capacity management, and booking operations" initial=overview timezone="UTC"
+theme mode=dark accent=violet
+capability storage.local
+
+resource locations label=name
+field locations.name text required min=2
+field locations.timezone text required default="UTC"
+field locations.status enum values=Active,Inactive required default=Active
+manage locations lifecycle=archive
+access locations view=role:admin|role:operator edit=role:admin|role:operator
+
+resource resources label=name
+field resources.name text required min=2
+field resources.location ref=locations required
+field resources.type enum values=MeetingRoom,Desk,Studio,TrainingHall,Equipment required default=MeetingRoom
+field resources.capacity number required default=4
+field resources.status enum values=Available,Maintenance,Retired required default=Available
+field resources.hourly_rate rate currency=USD unit=h required default=50
+manage resources lifecycle=archive
+access resources view=role:admin|role:operator edit=role:admin|role:operator
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.status enum values=Active,Suspended required default=Active
+field customers.joined_date date required default=today
+manage customers lifecycle=archive
+access customers view=role:admin|role:operator edit=role:admin|role:operator
+
+resource reservations label=title
+field reservations.title text required min=2
+field reservations.customer ref=customers required
+field reservations.resource ref=resources required
+field reservations.start_at date required default=today
+field reservations.end_at date required default=today
+field reservations.booking_period interval start=start_at end=end_at
+field reservations.attendees number required default=1
+field reservations.status enum values=Requested,Confirmed,CheckedIn,Completed,Cancelled,NoShow required default=Requested
+field reservations.amount money currency=USD required default=0
+field reservations.quote money currency=USD computed="booking_period.duration * resource.hourly_rate"
+field reservations.created_at date required default=today
+field reservations.updated date required default=today
+manage reservations lifecycle=archive
+access reservations view=role:admin|role:operator edit=role:admin|role:operator
+invariant reservations.lead_time when="start_at<now+2h&status==Requested" deny="Reservations must be booked at least 2 hours in advance"
+invariant reservations.no_overlap none=reservations scope=resource overlaps=booking_period where="status!=Cancelled" deny="Resource is already booked during this period"
+invariant reservations.no_blackout none=blackouts scope=resource overlaps=booking_period where="status==Active" deny="Resource is unavailable due to an active blackout window"
+invariant reservations.capacity when="attendees>resource.capacity" deny="Attendees cannot exceed resource capacity"
+process reservations state=status initial=Requested terminal=Completed,Cancelled,NoShow history touch=updated
+transition reservations.confirm from=Requested to=Confirmed action=confirm by=role:operator event=confirmed
+transition reservations.check_in from=Confirmed to=CheckedIn action=check_in by=role:operator event=checked_in
+transition reservations.complete from=CheckedIn to=Completed action=complete by=role:operator event=completed
+transition reservations.cancel from=Requested,Confirmed to=Cancelled action=cancel by=role:operator comment=optional event=cancelled
+transition reservations.mark_no_show from=Confirmed to=NoShow action=mark_no_show by=role:operator event=no_show
+highlight reservations.overdue when="end_at<today&status!=Completed&status!=Cancelled&status!=NoShow" tone=warning
+highlight reservations.confirmed when="status==Confirmed" tone=positive
+highlight reservations.cancelled when="status==Cancelled" tone=neutral
+
+resource blackouts label=reason
+field blackouts.resource ref=resources required
+field blackouts.reason text required min=2
+field blackouts.start_at date required default=today
+field blackouts.end_at date required default=today
+field blackouts.window interval start=start_at end=end_at
+field blackouts.status enum values=Active,Resolved required default=Active
+manage blackouts lifecycle=delete
+access blackouts view=role:admin|role:operator edit=role:admin|role:operator
+invariant blackouts.no_reservation none=reservations scope=resource overlaps=window where="status!=Cancelled" deny="Cannot create blackout over an existing reservation"
+highlight blackouts.active when="status==Active" tone=danger
+
+overview title="Global Reservation Dashboard"
+insight reservations.total_revenue op=sum field=amount label="Total Revenue"
+insight reservations.confirmed_count op=count where=status:Confirmed label="Confirmed Bookings"
+insight reservations.requested_count op=count where=status:Requested label="Pending Requests"
+insight blackouts.active_count op=count where=status:Active label="Active Blackouts"
+insight reservations.by_status op=count group=status label="Reservations by Status"
+insight resources.by_type op=count group=type label="Resources by Type"
+insight reservations.confirmations_trend op=count source=events.reservations where="to==Confirmed" label="Confirmations Over Time"
+insight reservations.cancellations_trend op=count source=events.reservations where="to==Cancelled" label="Cancellations Over Time"
+insight reservations.resource_utilization op=utilization overlaps=booking_period group=resource label="Resource Utilization"
+insight reservations.avg_duration op=avg field=booking_period.duration label="Average Booking Duration"
+

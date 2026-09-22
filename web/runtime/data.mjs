@@ -17,8 +17,34 @@ export const FAILURE_CATEGORIES = Object.freeze({
   CONFLICT: "conflict",
   INVALID_REQUEST: "invalid_request",
   UNSUPPORTED: "unsupported",
-  INTERNAL: "internal"
+  INTERNAL: "internal",
+  ATOMIC_CONSTRAINT_UNAVAILABLE: "atomic_constraint_unavailable",
+  SERIALIZATION_CONFLICT: "serialization_conflict"
 });
+
+/**
+ * Platform-neutral asynchronous FIFO mutex for serializing operations
+ */
+export class AsyncMutex {
+  constructor() {
+    this._queue = Promise.resolve();
+  }
+
+  async runExclusive(fn) {
+    let release;
+    const nextLock = new Promise((resolve) => {
+      release = resolve;
+    });
+    const currentQueue = this._queue;
+    this._queue = this._queue.then(() => nextLock);
+    await currentQueue;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
 
 /**
  * Validates that an SQL identifier contains only safe alphanumeric and underscore characters.
@@ -178,6 +204,16 @@ export class DataAdapter {
   }
 
   /**
+   * Executes an operation within an atomic, serializable mutation boundary.
+   */
+  async runAtomicMutation(operation, options = {}) {
+    throw new AdapterError(
+      FAILURE_CATEGORIES.ATOMIC_CONSTRAINT_UNAVAILABLE,
+      "Atomic mutation is not supported by this DataAdapter"
+    );
+  }
+
+  /**
    * Closes database connections or releases resources.
    */
   async close() {}
@@ -190,9 +226,32 @@ export class MemoryDataAdapter extends DataAdapter {
   constructor(initialData = {}) {
     super();
     this.tables = new Map();
+    this.mutex = new AsyncMutex();
     for (const [res, records] of Object.entries(initialData)) {
       this.tables.set(res, structuredClone(records));
     }
+  }
+
+  capabilities() {
+    return [
+      "read", "create", "update", "delete", "count", "filter", "sort", "paginate",
+      "atomic_mutation", "serializable_constraints"
+    ];
+  }
+
+  async runAtomicMutation(operation, options = {}) {
+    return this.mutex.runExclusive(async () => {
+      const snapshot = new Map();
+      for (const [k, v] of this.tables.entries()) {
+        snapshot.set(k, structuredClone(v));
+      }
+      try {
+        return await operation(this);
+      } catch (err) {
+        this.tables = snapshot;
+        throw err;
+      }
+    });
   }
 
   _table(resource) {
@@ -393,7 +452,22 @@ export class SqliteDataAdapter extends DataAdapter {
   }
 
   capabilities() {
-    return ["read", "create", "update", "delete", "count", "filter", "sort", "paginate", "transactions", "schema_introspection"];
+    return [
+      "read", "create", "update", "delete", "count", "filter", "sort", "paginate",
+      "transactions", "schema_introspection", "atomic_mutation", "serializable_constraints"
+    ];
+  }
+
+  async runAtomicMutation(operation, options = {}) {
+    this.db.exec("BEGIN IMMEDIATE;");
+    try {
+      const result = await operation(this);
+      this.db.exec("COMMIT;");
+      return result;
+    } catch (err) {
+      try { this.db.exec("ROLLBACK;"); } catch {}
+      throw err;
+    }
   }
 
   async schema(resource) {
@@ -615,6 +689,7 @@ export class PostgresDataAdapter extends DataAdapter {
     this.schemaMappings = new Map();
     this.executor = options.executor ?? this._defaultExecutor();
     this.inMemoryMockStore = new Map(); // Fallback in-process storage for testing when pg daemon is absent
+    this.mutex = new AsyncMutex();
   }
 
   setSchemaMapping(resource, mapping) {
@@ -673,7 +748,53 @@ export class PostgresDataAdapter extends DataAdapter {
   }
 
   capabilities() {
-    return ["read", "create", "update", "delete", "count", "filter", "sort", "paginate", "transactions", "schema_introspection"];
+    return [
+      "read", "create", "update", "delete", "count", "filter", "sort", "paginate",
+      "transactions", "schema_introspection", "atomic_mutation", "serializable_constraints"
+    ];
+  }
+
+  async runAtomicMutation(operation, options = {}) {
+    const maxRetries = options.maxRetries ?? 3;
+    let attempt = 0;
+    while (true) {
+      attempt++;
+      if (this.options.pgClient) {
+        await this.options.pgClient.query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;");
+        try {
+          const result = await operation(this);
+          await this.options.pgClient.query("COMMIT;");
+          return { result, retries: attempt - 1 };
+        } catch (err) {
+          try { await this.options.pgClient.query("ROLLBACK;"); } catch {}
+          const isSerialization = err.code === "40001" || err.code === "40P01" ||
+            String(err.message).toLowerCase().includes("could not serialize") ||
+            String(err.message).toLowerCase().includes("deadlock");
+          if (isSerialization && attempt <= maxRetries) {
+            await new Promise((r) => setTimeout(r, Math.min(10 * Math.pow(2, attempt), 200)));
+            continue;
+          }
+          if (isSerialization) {
+            throw new AdapterError(FAILURE_CATEGORIES.SERIALIZATION_CONFLICT, `PostgreSQL serialization conflict after ${maxRetries} retries`, { retries: attempt });
+          }
+          throw err;
+        }
+      } else {
+        return this.mutex.runExclusive(async () => {
+          const snapshot = new Map();
+          for (const [k, v] of this.inMemoryMockStore.entries()) {
+            snapshot.set(k, structuredClone(v));
+          }
+          try {
+            const result = await operation(this);
+            return { result, retries: 0 };
+          } catch (err) {
+            this.inMemoryMockStore = snapshot;
+            throw err;
+          }
+        });
+      }
+    }
   }
 
   async schema(resource) {
@@ -907,6 +1028,19 @@ export class PostgresDataAdapter extends DataAdapter {
   async count(resource, filter = {}) {
     const result = await this.find(resource, { filters: filter, paginate: false });
     return result.total;
+  }
+
+  async initTableFromEntity(entity) {
+    const ddl = this.generateTableDdl(entity);
+    if (this.options.pgClient) {
+      await this.options.pgClient.query(ddl);
+    }
+  }
+
+  async close() {
+    if (this.options.pgClient && typeof this.options.pgClient.end === "function") {
+      await this.options.pgClient.end();
+    }
   }
 }
 

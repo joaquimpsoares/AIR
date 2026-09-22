@@ -15,5 +15,8 @@
     "workflow:context": "node tools/workflow-context.mjs",
     "measure": "node tools/measure.mjs",
     "check": "npm test && npm run conformance && cargo check --workspace && npm run test:rust && npm run test:dual && npm run test:wasm && npm run measure && npm run context && npm run workflow:context"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

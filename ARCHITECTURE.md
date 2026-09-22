@@ -135,9 +135,6 @@ AIR applications state **what** data entity and relationships they require, not 
 See [`SECURITY.md`](SECURITY.md) for complete details.
 - **Opaque Secrets (`SecretHandle`):** Private class fields prevent reflection and serialization leakage into AIR source, logs, or Presentation IR.
 - **Two-Key Authorization:** An action requires BOTH Semantic Business Authority (`access`, `by`, `separate`) AND Infrastructure Capabilities (`CapabilitySet`).
-- **Network Destination Policy:** Outbound HTTP connectors enforce private IP blocking and intercept 3xx redirects to prevent SSRF bypasses.
-- **MCP Authority Isolation:** Dynamic tool discovery (`list_tools`) does NOT grant execution rights; execution requires explicit capability grants.
-
 ## Structured Observability & Deterministic Bounded Resilience
 
 See [`OPERATIONS.md`](OPERATIONS.md) for complete details.
@@ -146,4 +143,31 @@ See [`OPERATIONS.md`](OPERATIONS.md) for complete details.
 - **Bounded Resilience:** Clock-driven Circuit Breakers (`closed` -> `open` -> `half_open` -> `closed`), exponential backoff retries with mutation idempotency validation, single-flight recovery coalescing, and recovery budgets.
 - **Two-Key Recovery Authorization:** Privileged actions (`restart`) require policy eligibility AND operational capability grants, followed by mandatory post-recovery health checks before declaring success.
 - **AI Diagnostic Context (Read-Only):** Sanitized, frozen incident snapshots with zero action handles and zero secret leakage.
+
+## Temporal Semantics, Intervals & Mathematical Rates
+
+AIR provides first-class dimensional and temporal types:
+- **Canonical `Duration` & Algebra:** Typed duration representations (`s`, `m`, `h`, `d`, `w`) with exact arithmetic (`instant +/- duration`, `instant - instant`, comparisons).
+- **First-Class Rate Semantics (`rate<currency, unit>`):** Dimensional rate declarations (e.g. `rate<USD, h>`) that compute exact money quotes without binary floating-point drift. Plain money multiplied by duration is statically rejected.
+- **Temporal Interval Semantics:** Declared intervals (`interval <name> start=<start_field> end=<end_field>`) with exhaustive 10-scenario overlap evaluation (A through J). Cross-record non-overlap invariants and blackout windows enforce scheduling constraints with automatic self-exclusion during update.
+
+## Duration Analytics & Utilization Metrics
+
+Generic, compiler-native analytics over time and duration:
+- **Duration Aggregation:** Type-preserving `sum`, `avg`, `min`, `max`, and `count` with symmetric half-away-from-zero rounding.
+- **Exact Utilization Metrics:** Preserves exact BigInt numerator and denominator pairs, returning both rational truth and formatted ratios without floating-point degradation.
+- **Semantic Event Correlation:** Projects duration directly from event stream evidence.
+
+## Atomic Mutation & Constraint Enforcement
+
+Multi-record operations operate under strict ACID invariants:
+- **Multi-Record Transactions:** Atomic commits and rollbacks across In-Memory, SQLite, and PostgreSQL DataAdapters.
+- **Immediate Rollback on Violation:** If any invariant (lead time, interval overlap, capacity, or workflow guard) fails, the entire transaction rolls back atomically.
+
+## UI Interaction Artifacts & Responsive Architecture
+
+Secondary interaction surfaces and menus are native AIR compiler representations:
+- **Right-Side Sliding Drawers (`drawer`):** Reusable surfaces for `edit`, `create`, `detail`, `filter`, and `workflow` purposes. Automatically recompose to sliding drawers on desktop ($\ge 640\text{px}$) and full-screen sheets on mobile ($< 640\text{px}$).
+- **Context Menus (`menu`):** Adaptive popover, dropdown, or sheet menus for row-level actions with authority filtering and destructive styling.
+- **Focus & Discard Protection:** Built-in modal focus trap, focus restoration, and dirty-state confirmation guards. Zero application-specific JavaScript or CSS.
 
