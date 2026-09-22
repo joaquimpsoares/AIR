@@ -1,6 +1,20 @@
 import { AirError, AppRuntime, parseAir, parseSeedData } from "./air.mjs";
 import { compilePresentation } from "./presentation.mjs";
 import { compileVisualDesign, VISUAL_DESIGN_IR_VERSION, ARCHETYPES, CHARACTERS, COMPOSITIONS, SHELL_TYPES } from "./visual_design.mjs";
+import {
+  COLLECTION_REPRESENTATION,
+  FORM_REPRESENTATION,
+  NAVIGATION_REPRESENTATION,
+  HERO_REPRESENTATION,
+  WORKFLOW_REPRESENTATION,
+  SHELL_REPRESENTATION,
+  resolveCollectionArtifactLayout,
+  resolveFormArtifactLayout,
+  resolveNavigationArtifactLayout,
+  resolveHeroArtifactLayout,
+  resolveWorkflowArtifactLayout,
+  resolveShellArtifactLayout
+} from "./ui_hierarchy.mjs";
 import { DemoAuthAdapter } from "./auth.mjs";
 
 const ICONS = Object.freeze({
@@ -115,8 +129,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     }
   );
 
+  const initialWidth = options.containerWidth ?? (typeof window !== "undefined" ? window.innerWidth : 1024);
+
   const state = {
     screenId: options.initialScreen ?? presentationIr.app.initialScreen,
+    containerWidth: initialWidth,
     detail: null,
     modal: null,
     confirm: null,
@@ -231,11 +248,47 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       const tone = (runtime && screen?.resource) ? runtime.highlight(screen.resource, record) : null;
       return `
       <tr class="${tone ? `highlight-${escapeHtml(tone)}` : ""}" ${interactive && screen?.resource ? `tabindex="0" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}"` : ""}>
-        ${columns.map((fieldId) => `<td data-label="${escapeHtml(screen?.editor?.fields?.find(f => f.id === fieldId)?.label ?? titleCase(fieldId))}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
+        ${columns.map((fieldId) => `<td data-field="${escapeHtml(fieldId)}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
         ${interactive ? `<td class="row-arrow" aria-label="View record">${icon("chevron", 16)}</td>` : ""}
       </tr>`;
     }).join("");
-    return `<div class="table-wrap"><table><thead><tr>${head}${interactive ? '<th class="row-arrow"><span class="sr-only">Actions</span></th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="table-wrap"><table class="semantic-table"><thead><tr>${head}${interactive ? '<th class="row-arrow"><span class="sr-only">Actions</span></th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function renderRecordList(screen, fields, records, interactive = true) {
+    if (!records || records.length === 0) return "";
+    const primaryFieldId = fields.find((f) => f.priority === "primary")?.id ?? screen?.labelField ?? fields[0]?.id;
+    const secondaryFields = fields.filter((f) => f.id !== primaryFieldId);
+
+    const cards = records.map((record) => {
+      const tone = (runtime && screen?.resource) ? runtime.highlight(screen.resource, record) : null;
+      const primaryValue = record[primaryFieldId];
+      const primaryField = screen?.editor?.fields?.find((f) => f.id === primaryFieldId);
+      
+      const rows = secondaryFields.map((field) => {
+        const value = record[field.id];
+        return `
+        <div class="card-field-row" data-field="${escapeHtml(field.id)}">
+          <span class="card-field-label">${escapeHtml(field.label ?? titleCase(field.id))}</span>
+          <span class="card-field-value">${valueMarkup(screen, field.id, value, true)}</span>
+        </div>`;
+      }).join("");
+
+      return `
+      <article class="record-card ${tone ? `highlight-${escapeHtml(tone)}` : ""}" ${interactive && screen?.resource ? `tabindex="0" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}"` : ""}>
+        <div class="record-card-header">
+          <div class="record-card-primary">
+            <span class="card-field-value primary-value">${valueMarkup(screen, primaryFieldId, primaryValue)}</span>
+          </div>
+          ${interactive ? `<span class="card-arrow" aria-hidden="true">${icon("chevron", 16)}</span>` : ""}
+        </div>
+        <div class="record-card-body">
+          ${rows}
+        </div>
+      </article>`;
+    }).join("");
+
+    return `<div class="record-list" role="feed" aria-label="${escapeHtml(screen.title)} record list">${cards}</div>`;
   }
 
   function renderDashboard(screen) {
@@ -311,14 +364,33 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     const hasActiveFilters = Boolean(query.search || Object.values(query.filters).some(Boolean));
     const emptyStateInfo = hasActiveFilters ? screen.states.filteredEmpty : screen.states.empty;
 
+    const fieldsForLayout = (screen.editor?.fields ?? []).map((f) => ({
+      id: f.id,
+      label: f.label,
+      priority: f.id === screen.labelField ? "primary" : f.type === "enum" || f.id === "status" ? "primary" : "secondary"
+    }));
+
+    const layoutDecision = resolveCollectionArtifactLayout(state.containerWidth, fieldsForLayout);
+    let collectionContent = "";
+
+    if (result.records.length === 0) {
+      collectionContent = `<div class="empty-state"><div>${icon(hasActiveFilters ? "search" : screen.icon, 26)}</div><h3>${escapeHtml(emptyStateInfo.title)}</h3><p>${escapeHtml(emptyStateInfo.message)}</p></div>`;
+    } else if (layoutDecision.representation === COLLECTION_REPRESENTATION.RECORD_LIST || layoutDecision.mode === "card_list") {
+      collectionContent = renderRecordList(screen, fieldsForLayout, result.records);
+    } else if (layoutDecision.representation === COLLECTION_REPRESENTATION.CONDENSED_TABLE) {
+      collectionContent = renderTable(screen, layoutDecision.visibleColumns ?? screen.collection.columns, result.records);
+    } else {
+      collectionContent = renderTable(screen, screen.collection.columns, result.records);
+    }
+
     return `<div class="page-heading collection-heading"><div><p class="eyebrow">${escapeHtml(screen.title)}</p><h1>${escapeHtml(screen.title)}</h1><p>Manage ${escapeHtml(screen.title.toLowerCase())}</p></div>${createButton}</div>
-      <section class="panel collection-panel">
+      <section class="panel collection-panel" data-collection-representation="${escapeHtml(layoutDecision.representation || layoutDecision.mode)}">
         <div class="toolbar">
           <label class="search-control">${icon("search", 17)}<span class="sr-only">Search ${escapeHtml(screen.title)}</span><input type="search" data-search placeholder="Search ${escapeHtml(screen.title.toLowerCase())}…" value="${escapeHtml(query.search)}"></label>
           <div class="toolbar-actions">${filters}<label class="select-control sort-control">${icon("sort", 15)}<span class="sr-only">Sort</span><select data-sort>${sortOptions}</select></label></div>
         </div>
         <div class="result-meta"><span><strong>${result.total}</strong> ${result.total === 1 ? screen.singular.toLowerCase() : screen.title.toLowerCase()}</span>${hasActiveFilters ? '<button class="text-button" data-clear-filters>Clear filters</button>' : ""}</div>
-        ${result.records.length ? renderTable(screen, screen.collection.columns, result.records) : `<div class="empty-state"><div>${icon(hasActiveFilters ? "search" : screen.icon, 26)}</div><h3>${escapeHtml(emptyStateInfo.title)}</h3><p>${escapeHtml(emptyStateInfo.message)}</p></div>`}
+        ${collectionContent}
         <div class="pagination"><span>${from}–${to} of ${result.total}</span><div><button class="icon-button" data-page="${result.page - 1}" ${result.page <= 1 ? "disabled" : ""} aria-label="Previous page">${icon("back", 16)}</button><span>Page ${result.page} of ${result.totalPages}</span><button class="icon-button next" data-page="${result.page + 1}" ${result.page >= result.totalPages ? "disabled" : ""} aria-label="Next page">${icon("chevron", 16)}</button></div></div>
       </section>`;
   }
@@ -1152,10 +1224,12 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       ? runtime.editableFields(screen.resource, record).map((f) => screen.editor.fields.find((ef) => ef.id === f.id)).filter(Boolean)
       : screen.editor.fields.filter((field) => !field.readOnly && field.id !== "workflow_status");
 
-    return `<div class="modal-backdrop" data-dismiss-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" data-modal-panel>
+    const formDecision = resolveFormArtifactLayout(state.containerWidth);
+
+    return `<div class="modal-backdrop" data-dismiss-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" data-modal-panel data-form-representation="${escapeHtml(formDecision.representation)}">
       <div class="modal-heading"><div><p class="eyebrow">${editing ? "Update record" : "New record"}</p><h2 id="modal-title">${editing ? `Edit ${escapeHtml(screen.singular)}` : `Add ${escapeHtml(screen.singular)}`}</h2></div><button class="icon-button" data-close-modal aria-label="Close">${icon("close", 18)}</button></div>
       <form id="record-form" data-entity="${escapeHtml(screen.resource)}" data-record="${escapeHtml(state.modal.recordId ?? "")}" novalidate>
-        <div class="form-grid">${fields.map((field) => inputFor(screen, field, values[field.id] ?? field.defaultValue ?? "", state.modal.errors?.[field.id])).join("")}</div>
+        <div class="form-grid ${formDecision.representation === FORM_REPRESENTATION.SINGLE_COLUMN ? "single-column" : "multi-column"}">${fields.map((field) => inputFor(screen, field, values[field.id] ?? field.defaultValue ?? "", state.modal.errors?.[field.id])).join("")}</div>
         <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Cancel</button><button type="submit" class="button primary">${editing ? "Save changes" : `Create ${escapeHtml(screen.singular)}`}</button></div>
       </form>
     </section></div>`;
@@ -1181,7 +1255,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       root.innerHTML = `<main class="content auth-content" tabindex="-1">${renderPage()}</main><div id="air-toast" class="toast" role="status" aria-live="polite"></div>`;
     } else if (visualDesignIr.shell.type === SHELL_TYPES.PUBLIC || currentScreen()?.type === "marketing_landing") {
       // Public / Marketing Shell
-      root.innerHTML = `<div class="public-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}">
+      const navDecision = resolveShellArtifactLayout(state.containerWidth, true);
+      const isCompactNav = navDecision.representation === SHELL_REPRESENTATION.PUBLIC_COMPACT;
+
+      root.innerHTML = `<div class="public-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}" data-shell-representation="${escapeHtml(navDecision.representation)}">
         <header class="public-nav-header">
           <div class="public-nav-inner">
             <a href="#hero" class="brand public-brand" aria-label="AIR Platform home">
@@ -1191,20 +1268,25 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
                 <span class="brand-tagline">Autonomous Intent Runtime</span>
               </div>
             </a>
+            ${!isCompactNav ? `
             <nav class="public-nav-links" aria-label="Public navigation">
               ${visualDesignIr.shell.publicNavItems.map((item) => `<a href="${escapeHtml(item.href)}" class="public-nav-link">${escapeHtml(item.label)}</a>`).join("")}
             </nav>
+            ` : ""}
             <div class="public-nav-actions">
               <button class="icon-button" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
                 ${icon(state.theme === "dark" ? "sun" : "moon", 18)}
               </button>
+              ${!isCompactNav ? `
               <a href="${escapeHtml(visualDesignIr.shell.primaryCta.href)}" class="button primary small desktop-cta">${escapeHtml(visualDesignIr.shell.primaryCta.label)}</a>
+              ` : `
               <button class="icon-button mobile-nav-toggle" data-mobile-nav-toggle aria-label="Toggle mobile menu" aria-expanded="${state.mobileMenuOpen}">
                 ${icon(state.mobileMenuOpen ? "close" : "collection", 20)}
               </button>
+              `}
             </div>
           </div>
-          ${state.mobileMenuOpen ? `
+          ${isCompactNav && state.mobileMenuOpen ? `
             <div class="public-mobile-drawer" role="dialog" aria-modal="true" aria-label="Mobile navigation">
               <nav class="public-mobile-nav-links">
                 ${visualDesignIr.shell.publicNavItems.map((item) => `<a href="${escapeHtml(item.href)}" class="public-mobile-nav-link" data-close-mobile-nav>${escapeHtml(item.label)}</a>`).join("")}
@@ -1221,7 +1303,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       const principal = runtime?.principal;
       const isAuthenticated = Boolean(principal && (principal.id || (principal.roles && principal.roles.length > 0)));
       const currentUser = authAdapter.users?.find((u) => u.id === principal?.id);
-      root.innerHTML = `<div class="app-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}">
+      const shellDecision = resolveShellArtifactLayout(state.containerWidth, false);
+      const isCompactShell = shellDecision.representation === SHELL_REPRESENTATION.COMPACT;
+
+      root.innerHTML = `<div class="app-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}" data-shell-representation="${escapeHtml(shellDecision.representation)}">
+        ${!isCompactShell ? `
         <aside class="sidebar">
           <div class="brand"><span class="brand-mark">${icon("spark", 20)}</span><div><strong>${escapeHtml(presentationIr.app.title)}</strong><small>AIR native</small></div></div>
           ${isAuthenticated ? `
@@ -1241,6 +1327,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
             <button class="reset-button" data-reset>Reset demo data</button>
           </div>
         </aside>
+        ` : `
         <header class="mobile-header">
           <div class="brand"><span class="brand-mark">${icon("spark", 18)}</span><strong>${escapeHtml(presentationIr.app.title)}</strong></div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1248,8 +1335,9 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
             <button class="icon-button" data-theme-toggle aria-label="Toggle theme">${icon(state.theme === "dark" ? "sun" : "moon", 18)}</button>
           </div>
         </header>
+        `}
         <main class="content" tabindex="-1">${renderPage()}</main>
-        <nav class="mobile-nav" aria-label="Primary navigation">${renderNav()}</nav>
+        ${isCompactShell ? `<nav class="mobile-nav" aria-label="Primary navigation">${renderNav()}</nav>` : ""}
       </div><div id="air-toast" class="toast" role="status" aria-live="polite"></div>${renderModal()}${renderConfirm()}`;
     }
     bindEvents();
@@ -1700,6 +1788,21 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     });
   }
 
+  // Container capability detection & real-time recomposition via ResizeObserver
+  let resizeObserver = null;
+  if (typeof ResizeObserver !== "undefined" && root) {
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = Math.round(entry.contentRect.width || root.clientWidth || window.innerWidth || 1024);
+        if (width > 0 && Math.abs(width - state.containerWidth) >= 16) {
+          state.containerWidth = width;
+          render();
+        }
+      }
+    });
+    resizeObserver.observe(root);
+  }
+
   // Reactive subscription: Automatically re-render on semantic runtime mutations
   let unsubscribe = null;
   if (runtime && typeof runtime.subscribe === "function") {
@@ -1713,8 +1816,14 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     navigate,
     render,
     authAdapter,
+    state,
+    setContainerWidth(width) {
+      state.containerWidth = width;
+      render();
+    },
     destroy() {
       if (unsubscribe) unsubscribe();
+      if (resizeObserver) resizeObserver.disconnect();
     }
   };
 }

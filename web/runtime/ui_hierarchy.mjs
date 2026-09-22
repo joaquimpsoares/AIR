@@ -48,6 +48,43 @@ export const PLATFORM_TARGETS = Object.freeze({
 });
 
 /**
+ * Representation Modes selected by the Compiler / Runtime Layout Resolution.
+ * CSS Media Queries MUST NOT make behavioral representation decisions.
+ */
+export const COLLECTION_REPRESENTATION = Object.freeze({
+  TABLE: "table",
+  CONDENSED_TABLE: "condensed_table",
+  RECORD_LIST: "record_list"
+});
+
+export const FORM_REPRESENTATION = Object.freeze({
+  MULTI_COLUMN: "multi_column",
+  SINGLE_COLUMN: "single_column"
+});
+
+export const NAVIGATION_REPRESENTATION = Object.freeze({
+  FULL: "full",
+  COMPACT: "compact"
+});
+
+export const HERO_REPRESENTATION = Object.freeze({
+  SPLIT: "split",
+  STACKED: "stacked"
+});
+
+export const WORKFLOW_REPRESENTATION = Object.freeze({
+  GRAPH_AND_DETAIL: "graph_and_detail",
+  VERTICAL_STATE_STORY: "vertical_state_story"
+});
+
+export const SHELL_REPRESENTATION = Object.freeze({
+  SIDEBAR: "sidebar",
+  COMPACT: "compact",
+  PUBLIC: "public",
+  PUBLIC_COMPACT: "public_compact"
+});
+
+/**
  * 1. UI EXPERIENCES CATALOG
  */
 export const UI_EXPERIENCES = Object.freeze({
@@ -863,14 +900,15 @@ export function discoverUiCapability(query, context = {}) {
 /**
  * Resolves responsive layout strategy for a collection Artifact at a given container / viewport width.
  *
- * Wide (>= 640px): Full Table
- * Medium (480px - 639px): Condensed Table
- * Narrow (< 480px): Semantic Card List (zero column squishing)
+ * Wide (>= 640px): Full Table (COLLECTION_REPRESENTATION.TABLE)
+ * Medium (480px - 639px): Condensed Table (COLLECTION_REPRESENTATION.CONDENSED_TABLE)
+ * Narrow (< 480px): Semantic Record List (COLLECTION_REPRESENTATION.RECORD_LIST)
  */
 export function resolveCollectionArtifactLayout(containerWidth = 1024, fields = []) {
   if (containerWidth >= 640) {
     return {
-      mode: "table",
+      mode: COLLECTION_REPRESENTATION.TABLE,
+      representation: COLLECTION_REPRESENTATION.TABLE,
       visibleColumns: fields.map((f) => f.id),
       actionsLayout: "inline",
       requiresHorizontalScroll: false,
@@ -881,7 +919,8 @@ export function resolveCollectionArtifactLayout(containerWidth = 1024, fields = 
   if (containerWidth >= 480) {
     const primaryAndSecondary = fields.filter((f) => f.priority !== INFORMATION_PRIORITY.METADATA);
     return {
-      mode: "condensed_table",
+      mode: COLLECTION_REPRESENTATION.CONDENSED_TABLE,
+      representation: COLLECTION_REPRESENTATION.CONDENSED_TABLE,
       visibleColumns: primaryAndSecondary.map((f) => f.id),
       actionsLayout: "inline",
       requiresHorizontalScroll: false,
@@ -895,11 +934,48 @@ export function resolveCollectionArtifactLayout(containerWidth = 1024, fields = 
 
   return {
     mode: "card_list",
+    representation: COLLECTION_REPRESENTATION.RECORD_LIST,
     primaryField: primaryField?.id,
     secondaryFields: secondaryFields.map((f) => f.id),
     actionsLayout: "compact_dropdown",
     requiresHorizontalScroll: false,
     recomposedToCardList: true
+  };
+}
+
+export function resolveFormArtifactLayout(containerWidth = 1024) {
+  return {
+    representation: containerWidth < 640 ? FORM_REPRESENTATION.SINGLE_COLUMN : FORM_REPRESENTATION.MULTI_COLUMN,
+    columns: containerWidth < 640 ? 1 : 2
+  };
+}
+
+export function resolveNavigationArtifactLayout(containerWidth = 1024) {
+  return {
+    representation: containerWidth < 768 ? NAVIGATION_REPRESENTATION.COMPACT : NAVIGATION_REPRESENTATION.FULL
+  };
+}
+
+export function resolveHeroArtifactLayout(containerWidth = 1024) {
+  return {
+    representation: containerWidth < 768 ? HERO_REPRESENTATION.STACKED : HERO_REPRESENTATION.SPLIT
+  };
+}
+
+export function resolveWorkflowArtifactLayout(containerWidth = 1024) {
+  return {
+    representation: containerWidth < 768 ? WORKFLOW_REPRESENTATION.VERTICAL_STATE_STORY : WORKFLOW_REPRESENTATION.GRAPH_AND_DETAIL
+  };
+}
+
+export function resolveShellArtifactLayout(containerWidth = 1024, isPublic = false) {
+  if (isPublic) {
+    return {
+      representation: containerWidth < 768 ? SHELL_REPRESENTATION.PUBLIC_COMPACT : SHELL_REPRESENTATION.PUBLIC
+    };
+  }
+  return {
+    representation: containerWidth < 720 ? SHELL_REPRESENTATION.COMPACT : SHELL_REPRESENTATION.SIDEBAR
   };
 }
 
