@@ -1,0 +1,20 @@
+{
+  "task": "MOD3: Make email optional",
+  "description": "Relax email requirement so customer records can be created without email, while preserving uniqueness when present.",
+  "air": {
+    "files": ["showcase/customer-manager/app.air"],
+    "contextSnippet": "field customers.email email required unique",
+    "patch": "field customers.email email unique",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "files": [
+      "benchmarks/customer-manager/conventional/src/types/customer.ts",
+      "benchmarks/customer-manager/conventional/src/validation/customerSchema.ts",
+      "benchmarks/customer-manager/conventional/src/components/CustomerForm.tsx"
+    ],
+    "contextSnippet": "if (!input.email || !input.email.trim()) { errors.push({ field: 'email', message: 'Email address is required' }); }",
+    "patch": "if (input.email && input.email.trim()) { /* validate format & unique if present */ }",
+    "filesTouched": 3
+  }
+}

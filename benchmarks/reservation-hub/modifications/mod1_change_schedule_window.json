@@ -1,0 +1,17 @@
+{
+  "task": "MOD1: Change visible schedule window filter",
+  "description": "Adjust active schedule time horizon filter from 30 days to 7 days.",
+  "air": {
+    "files": ["showcase/reservation-hub/app.air"],
+    "contextSnippet": "field reservations.start_at date required default=today\nfield reservations.end_at date required default=today",
+    "patch": "highlight reservations.upcoming when=\"start_at>=today&start_at<=today+7d\" tone=positive",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "status": "NOT_YET_MEASURED",
+    "files": [],
+    "contextSnippet": "",
+    "patch": "",
+    "filesTouched": 0
+  }
+}

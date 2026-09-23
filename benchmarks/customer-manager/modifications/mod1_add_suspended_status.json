@@ -1,0 +1,21 @@
+{
+  "task": "MOD1: Add Suspended status enum value",
+  "description": "Add 'Suspended' to the allowable customer statuses across schema, UI filter, and validation.",
+  "air": {
+    "files": ["showcase/customer-manager/app.air"],
+    "contextSnippet": "field customers.status enum values=Active,Trial,Inactive required default=Trial",
+    "patch": "field customers.status enum values=Active,Trial,Inactive,Suspended required default=Trial",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "files": [
+      "benchmarks/customer-manager/conventional/src/types/customer.ts",
+      "benchmarks/customer-manager/conventional/src/validation/customerSchema.ts",
+      "benchmarks/customer-manager/conventional/src/components/CustomerTable.tsx",
+      "benchmarks/customer-manager/conventional/src/components/CustomerCard.tsx"
+    ],
+    "contextSnippet": "export type CustomerStatus = 'Active' | 'Trial' | 'Inactive';\nexport const VALID_STATUSES: CustomerStatus[] = ['Active', 'Trial', 'Inactive'];\ncase 'Inactive': return '...';",
+    "patch": "export type CustomerStatus = 'Active' | 'Trial' | 'Inactive' | 'Suspended';\nexport const VALID_STATUSES: CustomerStatus[] = ['Active', 'Trial', 'Inactive', 'Suspended'];\ncase 'Suspended': return 'bg-rose-950 text-rose-300 border-rose-800';",
+    "filesTouched": 4
+  }
+}

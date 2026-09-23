@@ -1,0 +1,28 @@
+{
+  "id": "inventory-hub",
+  "title": "Inventory Hub",
+  "tagline": "Exact integer inventory, computed totals, workflows, and edge-triggered notifications",
+  "description": "Flagship multi-warehouse inventory management system with exact integer quantities, computed order money totals, guarded order fulfillment transitions, and notification center with edge-triggered low-stock threshold alerts.",
+  "difficulty": "Flagship",
+  "category": "Supply Chain & Analytics",
+  "airEntry": "app.air",
+  "seedEntry": "seed.json",
+  "principal": { "roles": ["admin", "operator"] },
+  "capabilitiesDemonstrated": [
+    "integer_quantity_semantics",
+    "exact_money_arithmetic",
+    "computed_expressions",
+    "multi_resource_references",
+    "lifecycle_state_machine",
+    "guarded_transitions",
+    "edge_triggered_notifications",
+    "notification_center_bell",
+    "responsive_presentation"
+  ],
+  "conventionalReference": null,
+  "conventionalStack": "Pending full measurement",
+  "benchmarkTasks": [
+    "MOD1: Change low-stock threshold condition expression",
+    "MOD2: Change notification tone from warning to danger"
+  ]
+}

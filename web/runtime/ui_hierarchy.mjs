@@ -132,6 +132,17 @@ export const MENU_REPRESENTATION = Object.freeze({
   COMPACT_SHEET: "compact_sheet"
 });
 
+export const SCHEDULE_REPRESENTATION = Object.freeze({
+  RESOURCE_TIME_GRID: "resource_time_grid",
+  COMPACT_TIME_GRID: "compact_time_grid",
+  AGENDA_LIST: "agenda_list"
+});
+
+export const SCHEDULE_VIEW_MODE = Object.freeze({
+  DAY: "day",
+  WEEK: "week"
+});
+
 /**
  * Section Rhythm & Inter-Section Spacing Constants
  */
@@ -627,6 +638,33 @@ export const UI_SECTIONS = Object.freeze({
       ios: { view: "LazyVGrid", columns: "adaptive" },
       android: { composable: "LazyVerticalGrid", columns: "Adaptive" }
     }
+  },
+
+  schedule: {
+    id: "schedule",
+    title: "Schedule / Calendar Section",
+    role: "schedule",
+    description: "Comprehensive time and resource scheduling view composing schedule artifact, date navigation, filter controls, summary metrics, and detail/create drawers.",
+    requiredArtifacts: ["schedule"],
+    composedArtifacts: ["schedule", "navigation", "filters", "metric", "drawer", "menu", "empty_state"],
+    allowedCompositions: ["grid_with_controls", "stacked_agenda", "split_calendar_detail"],
+    responsivePolicy: {
+      wide: "resource time grid with top navigation and filter bar",
+      medium: "compact time grid with condensed filters",
+      narrow: "chronological agenda list with filter sheet and date picker",
+      containerQuery: true,
+      minViableWidth: 320
+    },
+    accessibility: {
+      landmark: "region",
+      headingLevel: "h2",
+      ariaRole: "region"
+    },
+    platformMappings: {
+      web: { tag: "section", baseClasses: "w-full flex flex-col gap-4" },
+      ios: { view: "VStack", style: "scheduleSection" },
+      android: { composable: "Column", style: "scheduleSection" }
+    }
   }
 });
 
@@ -1037,6 +1075,38 @@ export const UI_ARTIFACTS = Object.freeze({
       ios: { component: "Menu", modifiers: [".menuStyle(.automatic)"] },
       android: { component: "DropdownMenu", modifiers: ["Modifier.wrapContentSize()"] }
     }
+  },
+
+  schedule: {
+    id: "schedule",
+    title: "Schedule & Calendar Artifact",
+    category: "temporal_allocation",
+    semanticLevel: "primary_surface",
+    description: "Universal responsive schedule and calendar presenter adapting between resource time grid on desktop and chronological agenda on mobile.",
+    requires: ["intervals", "groups"],
+    provides: ["interval_selection", "slot_selection", "date_navigation", "view_toggle"],
+    states: [ARTIFACT_STATES.IDLE, ARTIFACT_STATES.LOADING, ARTIFACT_STATES.EMPTY, ARTIFACT_STATES.FILTERED_EMPTY, ARTIFACT_STATES.ERROR, ARTIFACT_STATES.UNAVAILABLE],
+    responsivePolicy: {
+      wide: { representation: SCHEDULE_REPRESENTATION.RESOURCE_TIME_GRID, timeAxis: "horizontal", groups: "vertical" },
+      medium: { representation: SCHEDULE_REPRESENTATION.COMPACT_TIME_GRID, timeAxis: "horizontal", groups: "vertical" },
+      narrow: { representation: SCHEDULE_REPRESENTATION.AGENDA_LIST, layout: "chronological_stack" },
+      containerBreakpoints: {
+        grid: 768,
+        compact_grid: 640,
+        agenda: 0
+      }
+    },
+    accessibilityPolicy: {
+      role: "region",
+      ariaLabel: "Schedule view",
+      linearAlternative: true,
+      keyboardNav: ["Tab to interval", "Enter to inspect", "Arrow keys"]
+    },
+    platformMappings: {
+      web: { component: "ScheduleCalendarPanel", tailwind: "w-full rounded-2xl bg-slate-900 border border-slate-800" },
+      ios: { component: "CalendarOrAgendaView", modifiers: [] },
+      android: { component: "ScheduleLazyColumnOrGrid", modifiers: ["Modifier.fillMaxWidth()"] }
+    }
   }
 });
 
@@ -1401,6 +1471,33 @@ export function resolveMenuArtifactLayout(containerWidth = 1024, context = "drop
     representation,
     isMobile,
     context
+  };
+}
+
+export function resolveScheduleArtifactLayout(containerWidth = 1024, options = {}) {
+  if (containerWidth >= 1024) {
+    return {
+      representation: SCHEDULE_REPRESENTATION.RESOURCE_TIME_GRID,
+      isGrid: true,
+      isCompact: false,
+      isAgenda: false,
+      minColumnWidth: 80
+    };
+  }
+  if (containerWidth >= 640) {
+    return {
+      representation: SCHEDULE_REPRESENTATION.COMPACT_TIME_GRID,
+      isGrid: true,
+      isCompact: true,
+      isAgenda: false,
+      minColumnWidth: 60
+    };
+  }
+  return {
+    representation: SCHEDULE_REPRESENTATION.AGENDA_LIST,
+    isGrid: false,
+    isCompact: true,
+    isAgenda: true
   };
 }
 

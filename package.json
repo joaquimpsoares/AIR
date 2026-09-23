@@ -14,7 +14,10 @@
     "context": "node tools/context-experiment.mjs",
     "workflow:context": "node tools/workflow-context.mjs",
     "measure": "node tools/measure.mjs",
-    "check": "npm test && npm run conformance && cargo check --workspace && npm run test:rust && npm run test:dual && npm run test:wasm && npm run measure && npm run context && npm run workflow:context"
+    "benchmark": "node tools/benchmark.mjs",
+    "benchmark:check": "node tools/benchmark.mjs --check",
+    "export:hf": "node tools/export-hf.mjs",
+    "check": "npm test && npm run conformance && cargo check --workspace && npm run test:rust && npm run test:dual && npm run test:wasm && npm run measure && npm run context && npm run workflow:context && npm run benchmark:check"
   },
   "dependencies": {
     "pg": "^8.23.0"

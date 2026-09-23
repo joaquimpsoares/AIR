@@ -12,6 +12,7 @@ const types = {
   ".json": "application/json; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".air": "text/plain; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon"
@@ -22,7 +23,14 @@ const host = process.env.AIR_HOST ?? "0.0.0.0";
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
-    let route = (url.pathname === "/" || url.pathname === "/web" || url.pathname === "/web/") ? "/web/index.html" : url.pathname;
+    let route = url.pathname;
+    if (route === "/" || route === "/web" || route === "/web/" || route === "/showcase" || route === "/showcase/" || route === "/examples" || route === "/examples/" || route.startsWith("/examples/")) {
+      route = "/web/showcase.html";
+    } else if (route === "/raw-runtime" || route === "/raw-runtime/") {
+      route = "/web/index.html";
+    } else if (route.startsWith("/web/showcase/") || route.startsWith("/web/docs/") || route.startsWith("/web/benchmarks/")) {
+      route = route.replace(/^\/web/, "");
+    }
     let path = normalize(join(root, route));
     if (!path.startsWith(root)) throw new Error("path outside workspace");
     let info = await stat(path);

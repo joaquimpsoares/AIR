@@ -804,3 +804,6 @@ function getMinViableVisualWidth(representation) {
 function titleCase(str) {
   return String(str ?? "").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+export * from "./schedule_ir.mjs";
+

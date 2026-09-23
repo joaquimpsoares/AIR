@@ -1,0 +1,58 @@
+{
+  "products": [
+    { "id": "prod_01", "sku": "SKU-PRO-01", "name": "Mechanical Keyboard", "category": "Electronics", "unit_price": 120.00, "status": "Active" },
+    { "id": "prod_02", "sku": "SKU-MON-02", "name": "4K IPS Monitor 27\"", "category": "Electronics", "unit_price": 450.00, "status": "Active" },
+    { "id": "prod_03", "sku": "SKU-CAB-03", "name": "Braided USB-C Cable", "category": "Supplies", "unit_price": 18.00, "status": "Active" }
+  ],
+  "warehouses": [
+    { "id": "wh_01", "code": "WH-US-WEST", "name": "Oakland Logistics Center", "region": "North America", "status": "Active" },
+    { "id": "wh_02", "code": "WH-EU-CENTRAL", "name": "Frankfurt Depot", "region": "Europe", "status": "Active" }
+  ],
+  "inventory_balances": [
+    {
+      "id": "bal_01",
+      "product": "prod_01",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 12,
+      "quantity_reserved": 0,
+      "reorder_level": 10,
+      "status": "InStock"
+    },
+    {
+      "id": "bal_02",
+      "product": "prod_02",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 4,
+      "quantity_reserved": 1,
+      "reorder_level": 5,
+      "status": "LowStock"
+    },
+    {
+      "id": "bal_03",
+      "product": "prod_03",
+      "warehouse": "wh_02",
+      "quantity_on_hand": 85,
+      "quantity_reserved": 5,
+      "reorder_level": 20,
+      "status": "InStock"
+    }
+  ],
+  "customers": [
+    { "id": "cust_01", "name": "Apex Tech Solutions", "email": "procurement@apextech.com", "status": "Active" },
+    { "id": "cust_02", "name": "OmniGlobal Services", "email": "orders@omniglobal.org", "status": "Active" }
+  ],
+  "orders": [
+    {
+      "id": "ord_001",
+      "order_number": "ORD-2026-001",
+      "customer": "cust_01",
+      "status": "Submitted",
+      "subtotal": 570.00,
+      "discount": 20.00,
+      "tax": 44.00,
+      "total": 594.00,
+      "created_at": "2026-03-20",
+      "updated": "2026-03-20"
+    }
+  ]
+}

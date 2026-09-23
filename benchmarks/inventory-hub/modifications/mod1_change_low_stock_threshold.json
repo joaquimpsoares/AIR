@@ -1,0 +1,17 @@
+{
+  "task": "MOD1: Change low-stock threshold behavior",
+  "description": "Adjust low stock trigger to include reserved inventory buffer: (quantity_on_hand - quantity_reserved) <= reorder_level.",
+  "air": {
+    "files": ["showcase/inventory-hub/app.air"],
+    "contextSnippet": "notify inventory_balances.low_stock when=\"quantity_on_hand<=reorder_level&quantity_on_hand>0\" tone=warning label=\"Low Stock Alert\"",
+    "patch": "notify inventory_balances.low_stock when=\"(quantity_on_hand - quantity_reserved)<=reorder_level&quantity_on_hand>0\" tone=warning label=\"Low Stock Alert\"",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "status": "PENDING",
+    "files": [],
+    "contextSnippet": "",
+    "patch": "",
+    "filesTouched": 0
+  }
+}

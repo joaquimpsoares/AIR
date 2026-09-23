@@ -1,0 +1,25 @@
+{
+  "id": "approval-workflow",
+  "title": "Approval Workflow",
+  "tagline": "State machines, authority guards, separation-of-duty, and audit history",
+  "description": "Multi-tier expense submission and approval flow with role-based transition authority, separation-of-duty enforcement (no self-approval), and append-only audit history.",
+  "difficulty": "Intermediate",
+  "category": "Workflow & Governance",
+  "airEntry": "app.air",
+  "seedEntry": "seed.json",
+  "principal": { "actor": "users", "id": "u_02", "roles": ["manager"] },
+  "capabilitiesDemonstrated": [
+    "state_machine_process",
+    "guarded_transitions",
+    "authority_policy",
+    "separation_of_duty",
+    "audit_event_history",
+    "timeline_visualization",
+    "drawer_workflow_actions"
+  ],
+  "conventionalReference": "benchmarks/approval-workflow/conventional",
+  "conventionalStack": "React 19 + TypeScript + Tailwind CSS + XState + Express API",
+  "benchmarkTasks": [
+    "MOD1: Add Rejected state and reject transition action"
+  ]
+}

@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="AIR Showcase - AI-Native Application Scaffolding & Measured Benchmarks">
+    <base href="/web/">
+    <title>AIR — AI-Native Application Scaffolding Showcase</title>
+    <link rel="stylesheet" href="./runtime/styles.css">
+    <link rel="stylesheet" href="./showcase.css">
+  </head>
+  <body class="showcase-body">
+    <!-- Showcase Container -->
+    <div id="showcase-app" class="showcase-container">
+      
+      <!-- Top Global Navigation Bar -->
+      <header class="global-navbar" role="banner">
+        <div class="nav-brand-section">
+          <a href="./#home" class="brand-link" id="nav-brand-home">
+            <span class="brand-pill">AIR</span>
+            <span class="brand-title">Showcase</span>
+          </a>
+          <span class="brand-badge">v1.0 Frozen</span>
+        </div>
+
+        <nav class="nav-links-section" role="navigation" aria-label="Main Navigation">
+          <button class="nav-tab active" data-view="home" id="nav-tab-home">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span>Overview</span>
+          </button>
+          <button class="nav-tab" data-view="capabilities" id="nav-tab-capabilities">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Capabilities</span>
+          </button>
+          <button class="nav-tab" data-view="examples" id="nav-tab-examples">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            <span>Examples & Explorer</span>
+          </button>
+          <button class="nav-tab" data-view="benchmarks" id="nav-tab-benchmarks">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            <span>Benchmarks & Proof</span>
+          </button>
+          <button class="nav-tab" data-view="docs" id="nav-tab-docs">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+            <span>Documentation</span>
+          </button>
+        </nav>
+
+        <div class="nav-actions-section">
+          <a href="https://github.com/joaquimpsoares/AIR" target="_blank" rel="noopener noreferrer" class="nav-github-btn" title="AIR on GitHub (joaquimpsoares/AIR)" aria-label="AIR GitHub repository">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            <span>GitHub</span>
+          </a>
+          <button class="nav-cta-btn" id="btn-quick-launch-example" aria-label="Launch Interactive Explorer">
+            <span>Launch Explorer</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+          <button class="nav-mobile-toggle" id="btn-showcase-mobile-toggle" aria-label="Toggle mobile menu" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Global Mobile Navigation Drawer -->
+      <div class="showcase-mobile-menu hidden" id="showcase-mobile-menu" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+        <nav class="showcase-mobile-nav-list">
+          <button class="mobile-nav-tab active" data-view="home">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span>Overview</span>
+          </button>
+          <button class="mobile-nav-tab" data-view="capabilities">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Capabilities</span>
+          </button>
+          <button class="mobile-nav-tab" data-view="examples">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            <span>Interactive Explorer</span>
+          </button>
+          <button class="mobile-nav-tab" data-view="benchmarks">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            <span>Benchmarks (49.2x)</span>
+          </button>
+          <button class="mobile-nav-tab" data-view="docs">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+            <span>Documentation</span>
+          </button>
+        </nav>
+        <div class="showcase-mobile-actions">
+          <a href="https://github.com/joaquimpsoares/AIR" target="_blank" rel="noopener noreferrer" class="mobile-github-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            <span>GitHub Repository (joaquimpsoares/AIR)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- VIEW 1: SHOWCASE HOME / LANDING -->
+      <section class="showcase-view active" id="view-home" aria-label="Showcase Overview">
+        <!-- Hero Section -->
+        <div class="hero-section">
+          <div class="hero-badge">
+            <span class="badge-dot"></span>
+            <span>AI-Native Application Scaffolding</span>
+          </div>
+          <h1 class="hero-headline">
+            The semantic compiler & runtime for the application scaffolding developers repeatedly rebuild.
+          </h1>
+          <p class="hero-subheading">
+            Express pure business intent—resources, temporal intervals, exact rates, guarded workflows, notifications, and responsive UI. AIR compiles and runs the rest with <strong>zero application-specific JS or CSS</strong>.
+          </p>
+
+          <div class="hero-cta-group">
+            <button class="btn-primary-hero" id="hero-btn-explore">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+              <span>Explore Interactive Examples</span>
+            </button>
+            <button class="btn-secondary-hero" id="hero-btn-proof">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              <span>View Measured Benchmarks (49.2x)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Product Demonstration: Real AIR Source ↔ Real Running Application ↔ Measured Summary -->
+        <div class="home-live-proof-section">
+          <div class="proof-header-bar">
+            <div class="proof-badge">Live Demonstration</div>
+            <h2 class="proof-title">Build the Intent. AIR Owns the Scaffolding.</h2>
+            <p class="proof-subtitle">
+              Pure declarative AIR compiled and running live in the browser. Zero application-specific JavaScript or CSS.
+            </p>
+          </div>
+
+          <div class="home-proof-container">
+            <!-- Source Side -->
+            <div class="home-proof-source-pane">
+              <div class="home-proof-pane-header">
+                <span class="proof-tab-badge">AIR Source (15 lines)</span>
+                <span class="canonical-tag">Canonical · showcase/customer-manager/app.air</span>
+              </div>
+              <pre class="home-proof-code"><code id="home-proof-air-code">air version=2
+app customer_manager title="Customer Manager" subtitle="Instant CRM with search, validation, and status lifecycle" initial=overview
+theme mode=dark accent=violet
+capability storage.local
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.company text
+field customers.status enum values=Active,Trial,Inactive required default=Trial
+field customers.joined date required default=today
+field customers.notes text long
+
+manage customers lifecycle=archive
+access customers view=role:admin|role:user edit=role:admin|role:user
+
+overview
+insight customers.total op=count field=name label="Total Customers"</code></pre>
+            </div>
+
+            <!-- Live App Side -->
+            <div class="home-proof-app-pane">
+              <div class="home-proof-pane-header">
+                <span class="proof-tab-badge">Live Running Application</span>
+                <span class="runtime-tag">Embedded Host Mode</span>
+              </div>
+              <div class="home-proof-viewport">
+                <div id="home-live-app-root" class="home-live-app-wrapper">
+                  <!-- Real AIR App mounted here via mountAirApp -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Proof Footer with Measured Metrics and CTA -->
+          <div class="home-proof-footer">
+            <div class="proof-metrics-summary">
+              <span class="proof-stat"><strong>123</strong> cl100k_base source tokens</span>
+              <span class="proof-divider">·</span>
+              <span class="proof-stat"><strong>1</strong> app file</span>
+              <span class="proof-divider">·</span>
+              <span class="proof-stat"><strong>0</strong> app-specific JS/CSS</span>
+              <span class="proof-divider">·</span>
+              <span class="proof-stat highlight"><strong>49.2x</strong> measured source compression</span>
+            </div>
+            <a href="./?example=customer-manager#examples" class="btn-proof-open-explorer" id="home-proof-open-explorer">
+              <span>Open in Interactive Explorer</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- Hero Metrics Cards -->
+        <div class="hero-metrics-section">
+          <div class="hero-metrics-grid">
+            <div class="metric-card">
+              <div class="metric-val">49.2x</div>
+              <div class="metric-title">Source Token Compression</div>
+              <div class="metric-desc">123 vs 6,047 cl100k_base tokens in Customer Manager reference</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val">10:1</div>
+              <div class="metric-title">Application File Reduction</div>
+              <div class="metric-desc">Single declarative .air intent vs 10 conventional source files</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val">0 lines</div>
+              <div class="metric-title">App-Specific JS & CSS</div>
+              <div class="metric-desc">UI, tables, drawers, forms, and validation 100% compiler-owned</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val">100%</div>
+              <div class="metric-title">Exact Rational Math</div>
+              <div class="metric-desc">BigInt rational minor units arithmetic with zero binary float drift</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3-Step Live Concept Progression -->
+        <div class="concept-progression-section">
+          <div class="section-tagline">How It Works</div>
+          <h2 class="section-heading">AIR Source → Live Application → Measured Evidence</h2>
+          <p class="section-subtext">
+            Developers still think in familiar concepts: resources, forms, tables, workflows, permissions, and responsive layouts. AIR eliminates repetitive mechanics by moving scaffolding into a reusable compiler/runtime.
+          </p>
+
+          <div class="progression-grid">
+            <div class="progression-step">
+              <div class="step-num">01</div>
+              <h4>1. Declare Business Intent</h4>
+              <p>Write compact semantic declarations defining entities, fields, enums, unique constraints, and workflow transitions.</p>
+              <pre class="step-code"><code>resource customers
+  name text required min=2
+  email email required unique
+  status enum Active,Trial,Inactive
+manage customers</code></pre>
+            </div>
+
+            <div class="progression-step">
+              <div class="step-num">02</div>
+              <h4>2. Instant Live Application</h4>
+              <p>AIR compiler infers data tables, search filters, modal edit drawers, responsive record cards, and validation automatically.</p>
+              <div class="step-preview-mock">
+                <div class="mock-row"><span>Acme Corp</span><span class="mock-badge green">Active</span></div>
+                <div class="mock-row"><span>Globex Robotics</span><span class="mock-badge yellow">Trial</span></div>
+              </div>
+            </div>
+
+            <div class="progression-step">
+              <div class="step-num">03</div>
+              <h4>3. Measured Verification</h4>
+              <p>Compare exact source footprint and modification context against conventional React 19 + TypeScript + Tailwind reference stacks.</p>
+              <div class="step-metric-callout">
+                <strong>49.2x</strong> Application Source Compression
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canonical Showcase Modules Cards -->
+        <div class="featured-examples-section">
+          <div class="section-tagline">Showcase Modules</div>
+          <h2 class="section-heading">Explore Canonical Public Examples</h2>
+          <p class="section-subtext">
+            Four carefully curated benchmark applications highlighting AIR's frozen architectural layers.
+          </p>
+
+          <div class="examples-cards-grid">
+            <!-- Customer Manager Card -->
+            <div class="example-card" data-launch="customer-manager">
+              <div class="card-top">
+                <span class="card-icon">🏢</span>
+                <span class="card-diff beginner">Beginner</span>
+              </div>
+              <h3>Customer Manager</h3>
+              <p class="card-desc">30-second introduction: Resources, unique email constraints, enum lifecycles, search, filter, and responsive edit drawers.</p>
+              <div class="card-tags">
+                <span class="tag">CRUD</span>
+                <span class="tag">Search & Filter</span>
+                <span class="tag">Drawers</span>
+                <span class="tag">Validation</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-stat">123 cl100k tokens (49.2x)</span>
+                <button class="btn-card-open">Open Explorer →</button>
+              </div>
+            </div>
+
+            <!-- Approval Workflow Card -->
+            <div class="example-card" data-launch="approval-workflow">
+              <div class="card-top">
+                <span class="card-icon">⚡</span>
+                <span class="card-diff intermediate">Intermediate</span>
+              </div>
+              <h3>Approval Workflow</h3>
+              <p class="card-desc">Guarded state transitions, role-based transition authority, separation-of-duty (no self-approval), and append-only audit history.</p>
+              <div class="card-tags">
+                <span class="tag">Workflows</span>
+                <span class="tag">Authority</span>
+                <span class="tag">Separation of Duty</span>
+                <span class="tag">Timelines</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-stat">300 cl100k tokens (13.0x)</span>
+                <button class="btn-card-open">Open Explorer →</button>
+              </div>
+            </div>
+
+            <!-- Reservation Hub Card -->
+            <div class="example-card" data-launch="reservation-hub">
+              <div class="card-top">
+                <span class="card-icon">📅</span>
+                <span class="card-diff advanced">Advanced</span>
+              </div>
+              <h3>Reservation Hub</h3>
+              <p class="card-desc">Temporal intervals, zero-overlap conflict prevention, exact hourly money rates, duration-based quote calculation, and calendar agenda views.</p>
+              <div class="card-tags">
+                <span class="tag">Intervals</span>
+                <span class="tag">Conflict Prevention</span>
+                <span class="tag">Exact Rates</span>
+                <span class="tag">Calendar</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-stat">559 cl100k tokens</span>
+                <button class="btn-card-open">Open Explorer →</button>
+              </div>
+            </div>
+
+            <!-- Inventory Hub Card -->
+            <div class="example-card" data-launch="inventory-hub">
+              <div class="card-top">
+                <span class="card-icon">📦</span>
+                <span class="card-diff flagship">Flagship</span>
+              </div>
+              <h3>Inventory Hub</h3>
+              <p class="card-desc">Flagship supply chain system: Exact integer stock, computed order totals, order fulfillment lifecycle, and edge-triggered low-stock notification alerts.</p>
+              <div class="card-tags">
+                <span class="tag">Integer Stock</span>
+                <span class="tag">Computed Money</span>
+                <span class="tag">Notifications</span>
+                <span class="tag">Bell Center</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-stat">711 cl100k tokens</span>
+                <button class="btn-card-open">Open Explorer →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- What AIR Owns Comparison Section -->
+        <div class="why-air-section">
+          <div class="section-tagline">Architectural Principle</div>
+          <h2 class="section-heading">What You Declare vs What AIR Owns</h2>
+          <div class="comparison-table-wrapper">
+            <table class="comparison-table">
+              <thead>
+                <tr>
+                  <th>Domain Layer</th>
+                  <th>What You / AI Declare (AIR Source)</th>
+                  <th>What AIR Compiler & Runtime Own Automatically</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Data & Schema</strong></td>
+                  <td>Entities, scalar fields, enums, unique constraints</td>
+                  <td>Storage normalization, indexing, input coercion, dirty state detection</td>
+                </tr>
+                <tr>
+                  <td><strong>Workflows</strong></td>
+                  <td>States, transitions, role authority, guards</td>
+                  <td>State machine engine, separation of duty, audit event streams</td>
+                </tr>
+                <tr>
+                  <td><strong>Money & Math</strong></td>
+                  <td>Rates (`rate<USD, h>`), computed expressions</td>
+                  <td>BigInt rational arithmetic, minor-unit rounding, zero float drift</td>
+                </tr>
+                <tr>
+                  <td><strong>User Interface</strong></td>
+                  <td>Overview, insights, manage declarations</td>
+                  <td>Sortable tables, responsive cards, slide-over drawers, form validation</td>
+                </tr>
+                <tr>
+                  <td><strong>Notifications</strong></td>
+                  <td>Condition edge rules (`when="..."`) or events (`on=...`)</td>
+                  <td>Edge triggering, deduplication, unread counts, popover & sheet UI</td>
+                </tr>
+                <tr>
+                  <td><strong>Accessibility</strong></td>
+                  <td>Semantic types and action intent</td>
+                  <td>Keyboard navigation, ARIA live regions, focus management</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Built for AI. Usable by Humans. Dual-Path Section -->
+        <div class="ai-human-convergence-section">
+          <div class="section-tagline">Core Philosophy</div>
+          <h2 class="section-heading">Built for AI. Usable by Humans.</h2>
+          <p class="section-subtext">
+            AIR is not a black-box prompt engine or runtime LLM dependency. It is a precise, declarative language that AI agents generate cleanly and humans read with total clarity.
+          </p>
+
+          <div class="convergence-grid">
+            <div class="convergence-card ai-track">
+              <div class="track-header">
+                <span class="track-icon">🤖</span>
+                <h3>AI Coding Agent Track</h3>
+              </div>
+              <ul class="track-points">
+                <li><strong>49.2x Source Compression:</strong> 123 cl100k_base tokens vs 6,047 conventional tokens in measured reference.</li>
+                <li><strong>Zero Hallucination:</strong> Compiler enforces strict AST validation with exact syntax diagnostics.</li>
+                <li><strong>Instant Modifications:</strong> Edits 1-line declarations rather than updating 8 interdependent files.</li>
+                <li><strong>Safe Generation:</strong> Invariants, permissions, and validation are mathematically enforced.</li>
+              </ul>
+            </div>
+
+            <div class="convergence-card convergence-bridge">
+              <div class="bridge-badge">Shared Ground Truth</div>
+              <div class="bridge-content">
+                <div class="bridge-arrow">⇄</div>
+                <div class="bridge-title">Plain Text .air File</div>
+                <p>Checked into Git. Diffable. Reviewable. Tested in CI. <strong>Zero AI required at runtime.</strong></p>
+              </div>
+            </div>
+
+            <div class="convergence-card human-track">
+              <div class="track-header">
+                <span class="track-icon">👨‍💻</span>
+                <h3>Human Developer Track</h3>
+              </div>
+              <ul class="track-points">
+                <li><strong>Total Inspectability:</strong> Read the entire application intent in under 30 seconds.</li>
+                <li><strong>Standard Git Workflows:</strong> Pull requests, code review, branching, and automated testing.</li>
+                <li><strong>Write by Hand:</strong> Intuitive syntax anyone can write without an AI agent.</li>
+                <li><strong>Zero Lock-in:</strong> Deterministic compiler generates clean semantic intermediate representations.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Open, Inspectable, Reproducible Section -->
+        <div class="open-reproducible-section">
+          <div class="section-tagline">Open Source & Verifiable</div>
+          <h2 class="section-heading">Open, Inspectable, Reproducible</h2>
+          <p class="section-subtext">
+            Every metric and feature demonstrated in this showcase is grounded in the public GitHub repository.
+          </p>
+
+          <div class="repro-grid">
+            <div class="repro-card">
+              <div class="repro-icon">📦</div>
+              <h4>Public GitHub Repository</h4>
+              <p>Canonical codebase, compiler, runtime, CLI, documentation, and test suites.</p>
+              <div class="repro-link-box">
+                <span class="repro-repo-name">joaquimpsoares/AIR</span>
+                <a href="https://github.com/joaquimpsoares/AIR" target="_blank" rel="noopener noreferrer" class="btn-repro-link" aria-label="View AIR repository on GitHub">
+                  <span>View Repository</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              </div>
+            </div>
+
+            <div class="repro-card">
+              <div class="repro-icon">🧪</div>
+              <h4>370+ Automated Tests</h4>
+              <p>Deterministic regression coverage across compiler, state machines, and temporal intervals.</p>
+              <code class="repro-cmd">npm test</code>
+            </div>
+
+            <div class="repro-card">
+              <div class="repro-icon">📊</div>
+              <h4>Reproducible Benchmarks</h4>
+              <p>Automated verification against cl100k_base tokenizer and reference implementations.</p>
+              <code class="repro-cmd">npm run benchmark:check</code>
+            </div>
+          </div>
+        </div>
+
+        <!-- Start Building Dual Paths Section -->
+        <div class="start-building-section">
+          <div class="section-tagline">Get Started</div>
+          <h2 class="section-heading">Start Building with AIR Today</h2>
+          <p class="section-subtext">
+            Choose your workflow: let your AI agent write AIR, or write it directly by hand.
+          </p>
+
+          <div class="start-cards-grid">
+            <!-- Path A: AI Agent -->
+            <div class="start-card">
+              <div class="start-badge">With AI Coding Agents</div>
+              <h3>Prompt Your Favorite AI Agent</h3>
+              <p>Provide this one-shot prompt to Cursor, Claude Code, GitHub Copilot, or ChatGPT to generate valid AIR:</p>
+              <div class="start-code-wrapper">
+                <pre class="start-code"><code>Write an AIR application for a customer CRM.
+Include name (required), email (unique), company,
+and status (Active, Trial, Inactive).
+Add search, filtering, and responsive edit drawers.</code></pre>
+              </div>
+              <div class="start-actions">
+                <button class="btn-start-action" id="btn-copy-ai-prompt">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <span>Copy Prompt</span>
+                </button>
+                <button class="btn-start-secondary" id="btn-view-ai-guide">View AI Agent Guide →</button>
+              </div>
+            </div>
+
+            <!-- Path B: By Hand -->
+            <div class="start-card">
+              <div class="start-badge">By Hand</div>
+              <h3>Zero-to-Running in 30 Seconds</h3>
+              <p>Clone the repository, start the dev server, and check declarations using the verified CLI:</p>
+              <div class="start-code-wrapper">
+                <pre class="start-code"><code>git clone https://github.com/joaquimpsoares/AIR.git
+cd AIR
+npm install
+npm run dev</code></pre>
+              </div>
+              <div class="start-actions">
+                <button class="btn-start-action" id="btn-copy-install-cmd">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <span>Copy Commands</span>
+                </button>
+                <button class="btn-start-secondary" id="btn-view-quickstart-guide">Getting Started Guide →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: CAPABILITIES SHOWCASE -->
+      <section class="showcase-view" id="view-capabilities" aria-label="AIR Capabilities">
+        <div class="capabilities-header">
+          <div class="section-tagline">Comprehensive Catalog</div>
+          <h2 class="section-heading">What AIR Can Do</h2>
+          <p class="section-subtext">
+            AIR provides an integrated semantic compiler and runtime with nine fully verified capability layers.
+          </p>
+        </div>
+
+        <div class="capabilities-grid">
+          <!-- 1. Semantic Schemas -->
+          <div class="capability-box">
+            <div class="cap-icon">🗄️</div>
+            <h3>Semantic Schemas & Entities</h3>
+            <p>Declare business resources with typed scalars (`text`, `email`, `phone`, `date`, `money`, `integer`), unique constraints, enum sets, and relational references.</p>
+            <div class="cap-code-snippet"><code>resource products label=name
+field products.sku text required unique
+field products.price money currency=USD</code></div>
+          </div>
+
+          <!-- 2. Workflows & State Machines -->
+          <div class="capability-box">
+            <div class="cap-icon">🔄</div>
+            <h3>State Machines & Guarded Transitions</h3>
+            <p>Enforce role-based authority, separation of duty (preventing self-approval), mandatory comments, and append-only audit history streams below the UI layer.</p>
+            <div class="cap-code-snippet"><code>process expenses state=status
+transition submit from=Draft to=Submitted by=owner
+transition approve from=Submitted to=Approved by=role:manager separate=submitter</code></div>
+          </div>
+
+          <!-- 3. UI Interaction Artifacts -->
+          <div class="capability-box">
+            <div class="cap-icon">🪟</div>
+            <h3>UI Interaction Artifacts (Drawers & Menus)</h3>
+            <p>Full drawer life-cycle supporting detail inspection, in-place edit hydration, context menus, focus trapping, dirty-state protection, and mobile sheet transformation.</p>
+            <div class="cap-code-snippet"><code>manage customers lifecycle=archive
+# Inferred: collection table, mobile cards, right drawer, context menu</code></div>
+          </div>
+
+          <!-- 4. Notification Semantics -->
+          <div class="capability-box">
+            <div class="cap-icon">🔔</div>
+            <h3>Notification Semantics & Center</h3>
+            <p>Event rules and condition-transition edge triggers (`false → true`) with deduplication, user-scoped read states, unread badge count, desktop popover, and mobile sheet.</p>
+            <div class="cap-code-snippet"><code>notify low_stock when="qty <= reorder_level & qty > 0" tone=warning
+notify out_of_stock when="qty <= 0" tone=danger</code></div>
+          </div>
+
+          <!-- 5. Temporal Intervals & Non-Overlap -->
+          <div class="capability-box">
+            <div class="cap-icon">⏱️</div>
+            <h3>Temporal Intervals & Schedules</h3>
+            <p>First-class interval types with 10-scenario non-overlap matrix validation, blackout windows, duration algebra, and responsive calendar/agenda artifacts.</p>
+            <div class="cap-code-snippet"><code>field booking_period interval start=start_at end=end_at
+invariant no_overlap none=reservations overlaps=booking_period</code></div>
+          </div>
+
+          <!-- 6. Exact Money & Rate Semantics -->
+          <div class="capability-box">
+            <div class="cap-icon">💰</div>
+            <h3>First-Class Money Rates & Exact Algebra</h3>
+            <p>Strongly-typed rates (`rate<USD, h>`) preventing dimensional errors, computed quotes via BigInt rational arithmetic, and symmetric half-away-from-zero rounding.</p>
+            <div class="cap-code-snippet"><code>field hourly_rate rate currency=USD unit=h
+field quote money computed="booking_period.duration * hourly_rate"</code></div>
+          </div>
+
+          <!-- 7. Relational Collections -->
+          <div class="capability-box">
+            <div class="cap-icon">📦</div>
+            <h3>Relational Collections & Aggregates</h3>
+            <p>Exact integer quantities, multi-resource line items, and declarative child aggregates (`sum`, `count`) without floating point drift.</p>
+            <div class="cap-code-snippet"><code>field total money computed="subtotal - discount + tax"
+insight total_rev op=sum field=total</code></div>
+          </div>
+
+          <!-- 8. Compiler-Owned Responsive Design -->
+          <div class="capability-box">
+            <div class="cap-icon">📱</div>
+            <h3>Compiler-Owned Responsive Compilation</h3>
+            <p>Platform-neutral 4-level UI hierarchy automatically transforms complex data tables into stacked record cards on mobile and sliding drawers into bottom sheets.</p>
+            <div class="cap-code-snippet"><code># Zero media queries or CSS needed in app source
+Table (≥768px) ⇄ Cards (<768px)
+Drawer (≥640px) ⇄ Sheet (<640px)</code></div>
+          </div>
+
+          <!-- 9. Visualizations & Graphs -->
+          <div class="capability-box">
+            <div class="cap-icon">📊</div>
+            <h3>Visualizations & Semantic Graphs</h3>
+            <p>Intent-driven time series trends, workflow DAG graphs, timeline audit events, and accessible exact numeric fallback tables.</p>
+            <div class="cap-code-snippet"><code># Automatic graph compilation
+Workflow DAGs, Audit Timelines, Sparklines</code></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: EXAMPLES & INTERACTIVE EXPLORER -->
+      <section class="showcase-view" id="view-examples" aria-label="Showcase Explorer">
+        <!-- Example Showcase Bar -->
+        <div class="explorer-header-bar">
+          <div class="explorer-left">
+            <div class="example-module-tabs" role="tablist">
+              <button class="module-tab-btn active" data-example="customer-manager">
+                <span>🏢 Customer Manager</span>
+                <span class="tab-tag">30s Intro</span>
+              </button>
+              <button class="module-tab-btn" data-example="approval-workflow">
+                <span>⚡ Approval Workflow</span>
+                <span class="tab-tag">Guards</span>
+              </button>
+              <button class="module-tab-btn" data-example="reservation-hub">
+                <span>📅 Reservation Hub</span>
+                <span class="tab-tag">Intervals</span>
+              </button>
+              <button class="module-tab-btn" data-example="inventory-hub">
+                <span>📦 Inventory Hub</span>
+                <span class="tab-tag">Flagship</span>
+              </button>
+              <button class="module-tab-btn" data-example="blank" id="module-tab-blank">
+                <span>✨ Blank Project</span>
+                <span class="tab-tag">Scratch</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="explorer-right">
+            <!-- Focus Mode Switcher -->
+            <div class="focus-switcher" role="group" aria-label="Explorer Focus Mode">
+              <button class="focus-btn active" data-focus="split" title="Split View (Code + Preview)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="12" x2="12" y1="3" y2="21"/></svg>
+                <span>Split</span>
+              </button>
+              <button class="focus-btn" data-focus="code" title="Code Focus (Full Width Editor)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <span>Code</span>
+              </button>
+              <button class="focus-btn" data-focus="app" title="App Focus (Full Width Preview)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                <span>App</span>
+              </button>
+            </div>
+
+            <!-- Responsive Preview Switcher -->
+            <div class="viewport-switcher" role="group" aria-label="Viewport Size">
+              <button class="viewport-btn active" data-width="100%" title="Desktop (100%)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+                <span>Desktop</span>
+              </button>
+              <button class="viewport-btn" data-width="768px" title="Tablet (768px)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="12" x2="12.01" y1="18" y2="18"/></svg>
+                <span>Tablet</span>
+              </button>
+              <button class="viewport-btn" data-width="390px" title="Mobile (390px)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="20" x="5" y="2" rx="2"/><line x1="12" x2="12.01" y1="18" y2="18"/></svg>
+                <span>Mobile</span>
+              </button>
+            </div>
+
+            <!-- Compiler Status Indicator -->
+            <div class="status-indicator-badge" id="compiler-status">
+              <span class="status-dot green"></span>
+              <span class="status-text">Compiled</span>
+            </div>
+
+            <div class="explorer-actions">
+              <button class="action-btn" id="btn-copy-air" title="Copy Current Editor Buffer">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <span>Copy</span>
+              </button>
+              <button class="action-btn" id="btn-clear-air" title="Clear Source and Start Blank Project">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <span>Clear</span>
+              </button>
+              <button class="action-btn" id="btn-reset-air" title="Reset Canonical Source">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Example Metadata Summary Banner -->
+        <div class="example-metadata-strip">
+          <div class="meta-strip-left">
+            <h3 class="meta-strip-title" id="module-title">Customer Manager</h3>
+            <span class="meta-strip-desc" id="module-desc">30-second introduction to AIR resources, validation, and CRUD UI</span>
+          </div>
+          <div class="meta-strip-tags" id="module-tags">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Resizable Two-Pane Area -->
+        <div class="showcase-split-container focus-split" id="split-container">
+          <!-- Left Pane: AIR Source & IR Inspectors -->
+          <div class="pane pane-source" id="left-code-pane">
+            <div class="pane-toolbar">
+              <div class="tabs-list" role="tablist">
+                <button class="tab-btn active" data-tab="air">AIR Source</button>
+                <button class="tab-btn" data-tab="explain">Explain</button>
+                <button class="tab-btn" data-tab="semantic-ir">Semantic IR</button>
+                <button class="tab-btn" data-tab="presentation-ir">Presentation IR</button>
+                <button class="tab-btn" data-tab="artifacts-ir">Artifacts IR</button>
+              </div>
+              <div class="edit-hint" id="editor-live-hint">● Live — compiled</div>
+            </div>
+
+            <!-- Compiler Diagnostic Error Banner -->
+            <div class="compiler-error-banner hidden" id="compiler-error-banner">
+              <span class="error-icon">⚠️</span>
+              <div class="error-details-box">
+                <div class="error-badge-title" id="compiler-error-title">SOURCE ERROR</div>
+                <div class="error-msg" id="compiler-error-msg"></div>
+              </div>
+            </div>
+
+            <!-- Editor, Explain & IR Tabs -->
+            <div class="code-editor-wrapper">
+              <div class="tab-content" id="tab-content-air">
+                <textarea id="air-code-editor" spellcheck="false" aria-label="AIR source editor"></textarea>
+              </div>
+              <div class="tab-content hidden" id="tab-content-explain">
+                <div class="explain-cards-container" id="explain-cards-list"></div>
+              </div>
+              <div class="tab-content hidden" id="tab-content-semantic-ir">
+                <pre class="ir-viewer"><code id="semantic-ir-code"></code></pre>
+              </div>
+              <div class="tab-content hidden" id="tab-content-presentation-ir">
+                <pre class="ir-viewer"><code id="presentation-ir-code"></code></pre>
+              </div>
+              <div class="tab-content hidden" id="tab-content-artifacts-ir">
+                <pre class="ir-viewer"><code id="artifacts-ir-code"></code></pre>
+                <div class="artifacts-air-provides">
+                  <div class="card-title">What AIR Provides Automatically</div>
+                  <div class="card-body" id="what-air-provides-artifacts-content"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Compact Selected Line Explanation Strip (Collapsible) -->
+            <div class="line-explain-strip hidden" id="line-explain-strip">
+              <div class="explain-strip-compact" id="explain-strip-toggle" role="button" tabindex="0" title="Click to toggle explanation details">
+                <div class="explain-strip-left">
+                  <span class="explain-strip-badge" id="strip-line-badge">Line 1</span>
+                  <span class="explain-strip-kind" id="strip-line-kind">Spec</span>
+                  <code class="explain-strip-code" id="strip-line-code"></code>
+                </div>
+                <div class="explain-strip-right">
+                  <span class="explain-strip-summary" id="strip-line-summary"></span>
+                  <button type="button" class="btn-strip-toggle" id="btn-toggle-explain-strip" aria-label="Toggle explanation details">▾</button>
+                </div>
+              </div>
+              <div class="explain-strip-expanded hidden" id="explain-strip-details">
+                <div class="explain-strip-body" id="strip-line-desc"></div>
+              </div>
+            </div>
+
+            <!-- Compact Collapsible "What AIR Provides" Inspector -->
+            <div class="air-provides-strip" id="air-provides-strip">
+              <div class="air-provides-bar" id="air-provides-toggle" role="button" tabindex="0" title="Click to toggle generated capabilities">
+                <div class="air-provides-summary">
+                  <span class="sparkle-icon">✨</span>
+                  <strong class="provides-heading">AIR provides:</strong>
+                  <span class="provides-summary-text" id="provides-summary-text">Table · Cards · Drawer · Form · Responsive modes</span>
+                </div>
+                <button type="button" class="btn-strip-toggle" id="btn-toggle-air-provides" aria-label="Toggle generated capabilities">▾</button>
+              </div>
+              <div class="air-provides-expanded hidden" id="air-provides-details">
+                <div class="card-body" id="what-air-provides-content"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Draggable Resizer Splitter -->
+          <div class="split-divider" id="split-divider" title="Drag to resize code / preview ratio (Double-click to reset)">
+            <div class="divider-handle"></div>
+          </div>
+
+          <!-- Right Pane: Live Application Running Viewport -->
+          <div class="pane pane-preview" id="right-preview-pane">
+            <div class="preview-toolbar">
+              <div class="preview-title-group">
+                <span class="preview-label" id="preview-label">LIVE RUNNING APPLICATION</span>
+                <span class="preview-example-title" id="preview-title">Customer Manager</span>
+                <span class="preview-status-pill hidden" id="preview-status-pill">⚠ Preview: last valid compile</span>
+              </div>
+              <div class="preview-controls">
+                <div class="preview-mode-toggle" role="group" aria-label="Preview Scaling Mode">
+                  <button class="preview-mode-btn active" data-scale-mode="fit" id="btn-preview-fit" title="Fit entire application viewport inside container">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+                    <span>Fit</span>
+                  </button>
+                  <button class="preview-mode-btn" data-scale-mode="actual" id="btn-preview-actual" title="Actual 100% scale with internal scroll">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                    <span>Actual</span>
+                  </button>
+                </div>
+                <span class="dimension-tag" id="dimension-indicator">Fit</span>
+              </div>
+            </div>
+
+            <!-- Dedicated Inventory Low-Stock Notification Walkthrough Bar -->
+            <div class="demo-walkthrough-bar hidden" id="inventory-notification-bar">
+              <div class="demo-bar-title">🔔 Low-Stock Edge Notification Demo:</div>
+              <div class="demo-steps-group">
+                <button class="demo-step-btn" id="demo-step-1" title="Trigger low stock 12 -> 8">1. Set Stock 12 → 8</button>
+                <button class="demo-step-btn" id="demo-step-2" title="No duplicate 8 -> 7">2. Set Stock 8 → 7</button>
+                <button class="demo-step-btn" id="demo-step-3" title="Replenish stock 7 -> 15">3. Replenish 7 → 15</button>
+                <button class="demo-step-btn" id="demo-step-4" title="Re-trigger 15 -> 9">4. Set Stock 15 → 9</button>
+              </div>
+              <span class="demo-status-text" id="demo-step-status">Click step 1 to test edge alert</span>
+            </div>
+
+            <!-- Viewport Container Frame -->
+            <div class="preview-viewport-container" id="preview-container">
+              <div id="live-app-root" class="live-app-wrapper" aria-busy="false">
+                <!-- Live AIR App Mounted Here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clear Confirmation Modal Backdrop -->
+        <div class="modal-backdrop hidden" id="clear-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="clear-modal-title">
+          <div class="modal-card">
+            <div class="modal-icon">🗑️</div>
+            <h4 id="clear-modal-title">Clear AIR source?</h4>
+            <p>This clears the editor and starts a blank playground. You can restore the showcase example at any time with <strong>Reset</strong>.</p>
+            <div class="modal-actions">
+              <button class="btn-modal-secondary" id="btn-cancel-clear">Cancel</button>
+              <button class="btn-modal-danger" id="btn-confirm-clear">Clear Source</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lower Section: Proof / Footprint / Benchmarks (Collapsible Bottom Drawer) -->
+        <div class="showcase-bottom-panel collapsed" id="showcase-bottom-panel">
+          <div class="bottom-panel-header">
+            <div class="bottom-tabs" role="tablist">
+              <button class="bottom-tab-btn active" data-bottom-tab="footprint">Measured Footprint</button>
+              <button class="bottom-tab-btn" data-bottom-tab="modifications">Modification Cost</button>
+              <button class="bottom-tab-btn" data-bottom-tab="removed">What Did AIR Remove?</button>
+              <button class="bottom-tab-btn" data-bottom-tab="conventional-source">Conventional Source</button>
+              <button class="bottom-tab-btn" data-bottom-tab="methodology">How Measured?</button>
+            </div>
+            <div class="bottom-panel-right-group">
+              <div class="compression-hero-badge" id="compression-hero-badge">
+                <span class="ratio-value" id="compression-hero-value">49.2x</span>
+                <span class="ratio-label">Source Token Compression</span>
+              </div>
+              <button class="btn-toggle-bottom-panel" id="btn-toggle-bottom-panel" title="Toggle benchmark drawer">
+                <span class="toggle-icon">▾</span>
+                <span class="toggle-text">Benchmarks</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="bottom-panel-body hidden" id="bottom-panel-body">
+            <!-- Footprint Tab -->
+            <div class="bottom-tab-content active" id="bottom-content-footprint">
+              <table class="benchmark-table">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>AIR Source</th>
+                    <th>Conventional Reference</th>
+                    <th>Compression / Difference</th>
+                  </tr>
+                </thead>
+                <tbody id="footprint-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Modifications Tab -->
+            <div class="bottom-tab-content hidden" id="bottom-content-modifications">
+              <div class="modifications-list" id="modifications-list"></div>
+            </div>
+
+            <!-- Removed Scaffolding Tab -->
+            <div class="bottom-tab-content hidden" id="bottom-content-removed">
+              <div class="removed-scaffolding-grid" id="removed-scaffolding-content"></div>
+            </div>
+
+            <!-- Conventional Source Tab -->
+            <div class="bottom-tab-content hidden" id="bottom-content-conventional-source">
+              <div class="conventional-source-viewer">
+                <div class="source-file-list" id="conv-file-list"></div>
+                <div class="source-file-code"><pre><code id="conv-file-content"></code></pre></div>
+              </div>
+            </div>
+
+            <!-- Methodology Tab -->
+            <div class="bottom-tab-content hidden" id="bottom-content-methodology">
+              <div class="methodology-card">
+                <h4>Reproducible Benchmark Methodology</h4>
+                <p>All measurements are generated automatically by <code>tools/benchmark.mjs</code> against checked-in source files in the repository.</p>
+                <ul>
+                  <li><strong>LLM Tokenizer:</strong> Standard <code>cl100k_base</code> subword BPE tokenizer used identically across AIR and Conventional files.</li>
+                  <li><strong>Canonical AIR Tokens:</strong> Exact language token stream computed via the compiler's lexer (<code>tokenizeLine</code> in <code>air.mjs</code>).</li>
+                  <li><strong>Inclusion Policy:</strong> Only application-specific source files are measured. All platform/runtime code and third-party node_modules packages are strictly excluded.</li>
+                  <li><strong>Conventional Stack:</strong> React 19 + TypeScript + Tailwind CSS with standard state management and schemas.</li>
+                  <li><strong>Equivalence Tests:</strong> Both implementations execute against identical functional specifications to guarantee feature parity.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: DEDICATED BENCHMARKS & PROOF PAGE -->
+      <section class="showcase-view" id="view-benchmarks" aria-label="Benchmarks & Proof">
+        <div class="benchmarks-header">
+          <div class="section-tagline">Measured Evidence</div>
+          <h2 class="section-heading">Verified Application Footprint Benchmarks</h2>
+          <p class="section-subtext">
+            Every metric is mathematically derived from checked-in source code and verified in continuous integration.
+          </p>
+        </div>
+
+        <div class="benchmarks-content-wrapper">
+          <!-- Summary Cards -->
+          <div class="benchmarks-summary-row">
+            <div class="bench-card">
+              <h3>Customer Manager</h3>
+              <div class="bench-big-number">49.2x</div>
+              <div class="bench-subtext">123 vs 6,047 cl100k tokens</div>
+              <div class="bench-meta">
+                <span>AIR: 1 file, 15 LOC</span>
+                <span>React: 10 files, 732 LOC</span>
+              </div>
+            </div>
+
+            <div class="bench-card">
+              <h3>Approval Workflow</h3>
+              <div class="bench-big-number">13.0x</div>
+              <div class="bench-subtext">300 vs 3,907 cl100k tokens</div>
+              <div class="bench-meta">
+                <span>AIR: 1 file, 30 LOC</span>
+                <span>React: 7 files, 417 LOC</span>
+              </div>
+            </div>
+
+            <div class="bench-card">
+              <h3>Reservation Hub</h3>
+              <div class="bench-big-number">246 tok</div>
+              <div class="bench-subtext">Canonical AIR tokens</div>
+              <div class="bench-meta">
+                <span>Intervals, rates, calendar</span>
+                <span>Conventional: Pending</span>
+              </div>
+            </div>
+
+            <div class="bench-card">
+              <h3>Inventory Hub</h3>
+              <div class="bench-big-number">283 tok</div>
+              <div class="bench-subtext">Canonical AIR tokens</div>
+              <div class="bench-meta">
+                <span>Stock, notifications, totals</span>
+                <span>Conventional: Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Master Comparison Table -->
+          <div class="benchmarks-master-table-card">
+            <h3>Full Footprint Breakdown (cl100k_base Tokenizer)</h3>
+            <table class="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Showcase Module</th>
+                  <th>AIR Canonical Tokens</th>
+                  <th>AIR cl100k Tokens</th>
+                  <th>Conventional cl100k Tokens</th>
+                  <th>Source Compression</th>
+                  <th>App Files</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Customer Manager</strong></td>
+                  <td>56 tokens</td>
+                  <td>123 tokens</td>
+                  <td>6,047 tokens</td>
+                  <td><strong class="highlight-val">49.2x</strong></td>
+                  <td>1 vs 10</td>
+                  <td><span class="status-pill green">Verified & Measured</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Approval Workflow</strong></td>
+                  <td>136 tokens</td>
+                  <td>300 tokens</td>
+                  <td>3,907 tokens</td>
+                  <td><strong class="highlight-val">13.0x</strong></td>
+                  <td>1 vs 7</td>
+                  <td><span class="status-pill green">Verified & Measured</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Reservation Hub</strong></td>
+                  <td>246 tokens</td>
+                  <td>559 tokens</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>1 file</td>
+                  <td><span class="status-pill yellow">Curated Showcase</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Inventory Hub</strong></td>
+                  <td>283 tokens</td>
+                  <td>711 tokens</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>1 file</td>
+                  <td><span class="status-pill yellow">Flagship Showcase</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Modification Matrix Card -->
+          <div class="benchmarks-master-table-card">
+            <h3>Measured Maintenance & Modification Cost</h3>
+            <table class="benchmark-table">
+              <thead>
+                <tr>
+                  <th>Modification Task</th>
+                  <th>AIR Context</th>
+                  <th>AIR Patch</th>
+                  <th>Conventional Context</th>
+                  <th>Conventional Patch</th>
+                  <th>Patch Compression</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Customer MOD1 (Add Suspended status)</strong></td>
+                  <td>11 tokens</td>
+                  <td>12 tokens</td>
+                  <td>38 tokens</td>
+                  <td>58 tokens</td>
+                  <td><strong class="highlight-val">4.8x</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Customer MOD2 (Add account_manager field)</strong></td>
+                  <td>20 tokens</td>
+                  <td>21 tokens</td>
+                  <td>21 tokens</td>
+                  <td>39 tokens</td>
+                  <td><strong class="highlight-val">1.9x</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Customer MOD3 (Make email optional)</strong></td>
+                  <td>6 tokens</td>
+                  <td>5 tokens</td>
+                  <td>29 tokens</td>
+                  <td>19 tokens</td>
+                  <td><strong class="highlight-val">3.8x</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Approval MOD1 (Add Rejected state & transition)</strong></td>
+                  <td>28 tokens</td>
+                  <td>43 tokens</td>
+                  <td>26 tokens</td>
+                  <td>47 tokens</td>
+                  <td><strong class="highlight-val">1.1x</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: DOCUMENTATION VIEWER -->
+      <section class="showcase-view" id="view-docs" aria-label="Documentation">
+        <div class="docs-layout">
+          <!-- Sidebar Navigation -->
+          <aside class="docs-sidebar" aria-label="Documentation Navigation">
+            <div class="docs-sidebar-header">
+              <span class="docs-nav-title">Documentation</span>
+              <span class="docs-version-badge">v1.0 Frozen</span>
+            </div>
+
+            <nav class="docs-nav-tree" role="navigation">
+              <div class="docs-nav-group">
+                <div class="docs-nav-group-title">Getting Started</div>
+                <ul class="docs-nav-list">
+                  <li><button class="docs-nav-item active" data-doc="getting-started/introduction">Introduction</button></li>
+                  <li><button class="docs-nav-item" data-doc="getting-started/installation">Installation & Setup</button></li>
+                  <li><button class="docs-nav-item" data-doc="getting-started/first-application">First Application</button></li>
+                  <li><button class="docs-nav-item" data-doc="getting-started/project-structure">Project Structure</button></li>
+                  <li><button class="docs-nav-item" data-doc="getting-started/run-and-edit">Run, Edit & Test</button></li>
+                </ul>
+              </div>
+
+              <div class="docs-nav-group">
+                <div class="docs-nav-group-title">Authoring Guides</div>
+                <ul class="docs-nav-list">
+                  <li><button class="docs-nav-item" data-doc="guides/writing-air-by-hand">Writing AIR by Hand</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/ai-coding-agents">AI Coding Agents</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/resources-and-fields">Resources & Fields</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/forms-and-management">Forms & Management</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/workflows">Workflows & State Machines</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/permissions">Permissions & Authority</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/computed-values">Computed Values & Math</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/relational-collections">Relational Collections</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/temporal-and-intervals">Temporal & Intervals</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/schedules">Schedules & Calendars</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/notifications">Notifications & Center</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/analytics-and-visualizations">Analytics & Charts</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/development-workflow">Development Workflow</button></li>
+                  <li><button class="docs-nav-item" data-doc="guides/current-boundaries">Current Boundaries</button></li>
+                </ul>
+              </div>
+
+              <div class="docs-nav-group">
+                <div class="docs-nav-group-title">Reference</div>
+                <ul class="docs-nav-list">
+                  <li><button class="docs-nav-item" data-doc="reference/cli">CLI Reference</button></li>
+                  <li><button class="docs-nav-item" data-doc="reference/air-language">AIR Language Grammar</button></li>
+                  <li><button class="docs-nav-item" data-doc="reference/repository-structure">Repository Structure</button></li>
+                </ul>
+              </div>
+
+              <div class="docs-nav-group">
+                <div class="docs-nav-group-title">Benchmarks</div>
+                <ul class="docs-nav-list">
+                  <li><button class="docs-nav-item" data-doc="benchmarks/methodology">Methodology & Proof</button></li>
+                </ul>
+              </div>
+            </nav>
+          </aside>
+
+          <!-- Main Doc Content -->
+          <main class="docs-content" role="main">
+            <div class="docs-content-header">
+              <div class="docs-breadcrumb" id="docs-breadcrumb">Documentation / Getting Started / Introduction</div>
+              <a href="https://github.com/joaquimpsoares/AIR" target="_blank" rel="noopener noreferrer" class="docs-github-link" id="docs-github-edit-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                <span>View on GitHub</span>
+              </a>
+            </div>
+
+            <article class="docs-article" id="docs-article-body">
+              <!-- Rendered Markdown Body -->
+            </article>
+
+            <div class="docs-footer-nav">
+              <button class="docs-nav-btn prev" id="docs-btn-prev">
+                <span class="nav-dir">← Previous</span>
+                <span class="nav-label" id="docs-label-prev"></span>
+              </button>
+              <button class="docs-nav-btn next" id="docs-btn-next">
+                <span class="nav-dir">Next →</span>
+                <span class="nav-label" id="docs-label-next"></span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Showcase JavaScript Controller -->
+    <script type="module" src="./showcase.mjs"></script>
+  </body>
+</html>

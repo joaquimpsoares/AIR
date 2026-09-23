@@ -1,0 +1,23 @@
+{
+  "task": "MOD2: Add account_manager relation field and filter",
+  "description": "Add an account_manager field linking customer records to team members, with search and UI representation.",
+  "air": {
+    "files": ["showcase/customer-manager/app.air"],
+    "contextSnippet": "resource customers label=name\nfield customers.name text required min=2\nfield customers.email email required unique",
+    "patch": "resource account_managers label=name\nfield account_managers.name text required\nfield customers.account_manager ref=account_managers required",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "files": [
+      "benchmarks/customer-manager/conventional/src/types/customer.ts",
+      "benchmarks/customer-manager/conventional/src/validation/customerSchema.ts",
+      "benchmarks/customer-manager/conventional/src/store/customerStore.ts",
+      "benchmarks/customer-manager/conventional/src/components/CustomerTable.tsx",
+      "benchmarks/customer-manager/conventional/src/components/CustomerForm.tsx",
+      "benchmarks/customer-manager/conventional/src/components/CustomerDrawer.tsx"
+    ],
+    "contextSnippet": "export interface Customer { ... accountManager?: string; } ... validateCustomer(...) ... <CustomerTable /> ... <CustomerForm />",
+    "patch": "export interface AccountManager { id: string; name: string; }\nexport interface Customer { ... accountManagerId: string; }\n// update validation schema, form fields, drawer rendering, table columns, store filtering",
+    "filesTouched": 6
+  }
+}

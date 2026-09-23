@@ -317,3 +317,110 @@ test("PART 7: Zero Application-Specific CSS & Zero Domain Branches Verification"
     );
   }
 });
+
+test("PART 8: Animated Drawer Exit Transition State & DOM Presence Verification", () => {
+  const schema = `
+air version=2
+app test_app title="Test App" subtitle="Test"
+theme mode=light accent=blue
+
+resource items label=name
+field items.name text required
+manage items lifecycle=archive
+`;
+
+  const model = parseAir(schema);
+  const runtime = new AppRuntime(model, { seedData: { items: [{ id: "i1", name: "Item 1" }] } });
+  const ir = compilePresentation(model, { runtime });
+  const root = {
+    innerHTML: "",
+    clientWidth: 1024,
+    setAttribute() {},
+    removeAttribute() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  };
+
+  const app = renderPresentation(root, ir, runtime, { model });
+
+  // Open drawer
+  app.state.drawer = {
+    purpose: "edit",
+    entityId: "items",
+    recordId: "i1",
+    status: "open",
+    values: { name: "Item 1" },
+    errors: {},
+    isDirty: false
+  };
+  app.render();
+
+  assert.ok(root.innerHTML.includes('data-status="open"'), "Drawer rendered with open status");
+  assert.ok(root.innerHTML.includes('data-drawer-panel'), "Drawer panel in DOM");
+
+  // Mark status as closing (during exit animation)
+  app.state.drawer.status = "closing";
+  app.render();
+
+  assert.ok(root.innerHTML.includes('data-status="closing"'), "Drawer preserved in DOM with closing status during exit animation");
+  assert.ok(root.innerHTML.includes('data-drawer-panel'), "Drawer panel remains mounted during exit transition");
+
+  // After exit completes, drawer is unmounted
+  app.state.drawer = null;
+  app.render();
+
+  assert.ok(!root.innerHTML.includes('data-drawer-panel'), "Drawer unmounted cleanly after transition completes");
+});
+
+test("PART 9: Compiler-Native Discard Confirmation Modal & Zero window.confirm()", () => {
+  const schema = `
+air version=2
+app test_app title="Test App" subtitle="Test"
+theme mode=light accent=blue
+
+resource items label=name
+field items.name text required
+manage items lifecycle=archive
+`;
+
+  const model = parseAir(schema);
+  const runtime = new AppRuntime(model, { seedData: { items: [{ id: "i1", name: "Item 1" }] } });
+  const ir = compilePresentation(model, { runtime });
+  const root = {
+    innerHTML: "",
+    clientWidth: 1024,
+    setAttribute() {},
+    removeAttribute() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  };
+
+  const app = renderPresentation(root, ir, runtime, { model });
+
+  // Open dirty drawer
+  app.state.drawer = {
+    purpose: "edit",
+    entityId: "items",
+    recordId: "i1",
+    status: "open",
+    values: { name: "Modified Name" },
+    errors: {},
+    isDirty: true
+  };
+  app.render();
+
+  // Trigger discard confirmation
+  app.state.confirm = { type: "discard_drawer" };
+  app.render();
+
+  assert.ok(root.innerHTML.includes('data-confirm-modal'), "Renders native confirm modal");
+  assert.ok(root.innerHTML.includes('Discard changes?'), "Renders title 'Discard changes?'");
+  assert.ok(root.innerHTML.includes('data-cancel-discard'), "Offers 'Keep editing' cancel button");
+  assert.ok(root.innerHTML.includes('data-confirm-discard'), "Offers 'Discard' confirmation button");
+  assert.ok(root.innerHTML.includes('data-dismiss-discard-confirm'), "Provides dismiss backdrop");
+
+  // Verify ui.mjs does NOT contain window.confirm for drawer discard protection
+  const uiContent = fs.readFileSync(path.resolve("web/runtime/ui.mjs"), "utf-8");
+  assert.ok(!uiContent.includes('confirm("You have unsaved changes'), "Zero window.confirm calls for drawer discard protection");
+});
+

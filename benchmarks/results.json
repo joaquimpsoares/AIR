@@ -1,0 +1,319 @@
+{
+  "benchmarkVersion": "1.0.0",
+  "tokenizer": "cl100k_base (OpenAI/Anthropic/Llama standard subword BPE)",
+  "timestamp": "2026-09-23T09:33:30.228Z",
+  "examples": [
+    {
+      "id": "customer-manager",
+      "title": "Customer Manager",
+      "air": {
+        "file": "showcase/customer-manager/app.air",
+        "lines": 19,
+        "loc": 15,
+        "bytes": 692,
+        "canonicalTokens": 56,
+        "llmTokens": 123,
+        "appJS": 0,
+        "appCSS": 0,
+        "files": 1
+      },
+      "conventional": {
+        "stack": "React 19 + TypeScript + Tailwind CSS + Zod + Zustand",
+        "filesCount": 10,
+        "loc": 732,
+        "bytes": 27730,
+        "llmTokens": 6047,
+        "jsTsTokens": 5953,
+        "cssTokens": 94,
+        "configTokens": 0,
+        "files": [
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerCard.tsx",
+            "loc": 67,
+            "bytes": 2374,
+            "llmTokens": 552
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerDrawer.tsx",
+            "loc": 132,
+            "bytes": 5162,
+            "llmTokens": 1080
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerFilters.tsx",
+            "loc": 52,
+            "bytes": 1970,
+            "llmTokens": 418
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerForm.tsx",
+            "loc": 120,
+            "bytes": 4668,
+            "llmTokens": 1063
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerManagerApp.tsx",
+            "loc": 119,
+            "bytes": 4169,
+            "llmTokens": 812
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/components/CustomerTable.tsx",
+            "loc": 89,
+            "bytes": 3442,
+            "llmTokens": 809
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/store/customerStore.ts",
+            "loc": 82,
+            "bytes": 3170,
+            "llmTokens": 691
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/styles/app.css",
+            "loc": 11,
+            "bytes": 384,
+            "llmTokens": 94
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/types/customer.ts",
+            "loc": 20,
+            "bytes": 639,
+            "llmTokens": 140
+          },
+          {
+            "file": "benchmarks/customer-manager/conventional/src/validation/customerSchema.ts",
+            "loc": 40,
+            "bytes": 1752,
+            "llmTokens": 388
+          }
+        ]
+      },
+      "sourceCompressionRatio": 49.2,
+      "modifications": [
+        {
+          "task": "MOD1: Add Suspended status enum value",
+          "description": "Add 'Suspended' to the allowable customer statuses across schema, UI filter, and validation.",
+          "air": {
+            "contextLLMTokens": 11,
+            "patchLLMTokens": 12,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "contextLLMTokens": 38,
+            "patchLLMTokens": 58,
+            "filesTouched": 4
+          },
+          "contextCompressionRatio": 3.5,
+          "patchCompressionRatio": 4.8
+        },
+        {
+          "task": "MOD2: Add account_manager relation field and filter",
+          "description": "Add an account_manager field linking customer records to team members, with search and UI representation.",
+          "air": {
+            "contextLLMTokens": 20,
+            "patchLLMTokens": 21,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "contextLLMTokens": 21,
+            "patchLLMTokens": 39,
+            "filesTouched": 6
+          },
+          "contextCompressionRatio": 1.1,
+          "patchCompressionRatio": 1.9
+        },
+        {
+          "task": "MOD3: Make email optional",
+          "description": "Relax email requirement so customer records can be created without email, while preserving uniqueness when present.",
+          "air": {
+            "contextLLMTokens": 6,
+            "patchLLMTokens": 5,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "contextLLMTokens": 29,
+            "patchLLMTokens": 19,
+            "filesTouched": 3
+          },
+          "contextCompressionRatio": 4.8,
+          "patchCompressionRatio": 3.8
+        }
+      ]
+    },
+    {
+      "id": "approval-workflow",
+      "title": "Approval Workflow",
+      "air": {
+        "file": "showcase/approval-workflow/app.air",
+        "lines": 37,
+        "loc": 30,
+        "bytes": 1822,
+        "canonicalTokens": 136,
+        "llmTokens": 300,
+        "appJS": 0,
+        "appCSS": 0,
+        "files": 1
+      },
+      "conventional": {
+        "stack": "React 19 + TypeScript + Tailwind CSS + XState + Express API",
+        "filesCount": 7,
+        "loc": 417,
+        "bytes": 17818,
+        "llmTokens": 3907,
+        "jsTsTokens": 3864,
+        "cssTokens": 43,
+        "configTokens": 0,
+        "files": [
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/components/ExpenseTable.tsx",
+            "loc": 108,
+            "bytes": 4561,
+            "llmTokens": 977
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/components/ExpenseTimeline.tsx",
+            "loc": 33,
+            "bytes": 1442,
+            "llmTokens": 358
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/components/ExpenseWorkflowApp.tsx",
+            "loc": 111,
+            "bytes": 5176,
+            "llmTokens": 1110
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/state/workflowEngine.ts",
+            "loc": 104,
+            "bytes": 4439,
+            "llmTokens": 977
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/styles/workflow.css",
+            "loc": 3,
+            "bytes": 202,
+            "llmTokens": 43
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/types/expense.ts",
+            "loc": 37,
+            "bytes": 1040,
+            "llmTokens": 237
+          },
+          {
+            "file": "benchmarks/approval-workflow/conventional/src/validation/expenseValidation.ts",
+            "loc": 21,
+            "bytes": 958,
+            "llmTokens": 205
+          }
+        ]
+      },
+      "sourceCompressionRatio": 13,
+      "modifications": [
+        {
+          "task": "MOD1: Add Rejected state and reject transition action",
+          "description": "Introduce a terminal Rejected state, reject transition action with separation-of-duty guard and mandatory rejection reason comment.",
+          "air": {
+            "contextLLMTokens": 28,
+            "patchLLMTokens": 43,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "contextLLMTokens": 26,
+            "patchLLMTokens": 47,
+            "filesTouched": 4
+          },
+          "contextCompressionRatio": 0.9,
+          "patchCompressionRatio": 1.1
+        }
+      ]
+    },
+    {
+      "id": "reservation-hub",
+      "title": "Reservation Hub",
+      "air": {
+        "file": "showcase/reservation-hub/app.air",
+        "lines": 62,
+        "loc": 52,
+        "bytes": 3529,
+        "canonicalTokens": 246,
+        "llmTokens": 559,
+        "appJS": 0,
+        "appCSS": 0,
+        "files": 1
+      },
+      "conventional": {
+        "status": "NOT_YET_MEASURED",
+        "comparisonAvailable": false
+      },
+      "sourceCompressionRatio": null,
+      "modifications": [
+        {
+          "task": "MOD1: Change visible schedule window filter",
+          "description": "Adjust active schedule time horizon filter from 30 days to 7 days.",
+          "air": {
+            "contextLLMTokens": 17,
+            "patchLLMTokens": 19,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "status": "NOT_YET_MEASURED"
+          },
+          "contextCompressionRatio": null,
+          "patchCompressionRatio": null
+        }
+      ]
+    },
+    {
+      "id": "inventory-hub",
+      "title": "Inventory Hub",
+      "air": {
+        "file": "showcase/inventory-hub/app.air",
+        "lines": 70,
+        "loc": 59,
+        "bytes": 4120,
+        "canonicalTokens": 283,
+        "llmTokens": 711,
+        "appJS": 0,
+        "appCSS": 0,
+        "files": 1
+      },
+      "conventional": {
+        "status": "PENDING",
+        "comparisonAvailable": false
+      },
+      "sourceCompressionRatio": null,
+      "modifications": [
+        {
+          "task": "MOD1: Change low-stock threshold behavior",
+          "description": "Adjust low stock trigger to include reserved inventory buffer: (quantity_on_hand - quantity_reserved) <= reorder_level.",
+          "air": {
+            "contextLLMTokens": 27,
+            "patchLLMTokens": 30,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "status": "PENDING"
+          },
+          "contextCompressionRatio": null,
+          "patchCompressionRatio": null
+        },
+        {
+          "task": "MOD2: Change notification tone",
+          "description": "Escalate low stock notification tone from warning to danger.",
+          "air": {
+            "contextLLMTokens": 27,
+            "patchLLMTokens": 27,
+            "filesTouched": 1
+          },
+          "conventional": {
+            "status": "PENDING"
+          },
+          "contextCompressionRatio": null,
+          "patchCompressionRatio": null
+        }
+      ]
+    }
+  ]
+}

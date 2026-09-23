@@ -1,0 +1,39 @@
+{
+  "version": "1.0.0",
+  "title": "AIR Developer Showcase & Measured Benchmarks",
+  "positioning": "AI-native application scaffolding: A semantic compiler/runtime for the application scaffolding developers and AI agents repeatedly rebuild.",
+  "examples": [
+    {
+      "id": "customer-manager",
+      "title": "Customer Manager",
+      "tagline": "30-second introduction to AIR resources, validation, and CRUD UI",
+      "difficulty": "Beginner",
+      "category": "Resource Management",
+      "path": "showcase/customer-manager"
+    },
+    {
+      "id": "approval-workflow",
+      "title": "Approval Workflow",
+      "tagline": "State machines, authority guards, separation-of-duty, and audit history",
+      "difficulty": "Intermediate",
+      "category": "Workflow & Governance",
+      "path": "showcase/approval-workflow"
+    },
+    {
+      "id": "reservation-hub",
+      "title": "Reservation Hub",
+      "tagline": "Temporal interval semantics, conflict prevention, and exact money rates",
+      "difficulty": "Advanced",
+      "category": "Temporal & Operations",
+      "path": "showcase/reservation-hub"
+    },
+    {
+      "id": "inventory-hub",
+      "title": "Inventory Hub",
+      "tagline": "Exact integer inventory, computed totals, workflows, and edge-triggered notifications",
+      "difficulty": "Flagship",
+      "category": "Supply Chain & Analytics",
+      "path": "showcase/inventory-hub"
+    }
+  ]
+}

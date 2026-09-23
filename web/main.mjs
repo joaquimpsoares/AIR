@@ -2,6 +2,8 @@ import { mountAirApp, renderFatalError } from "./runtime/ui.mjs";
 import { OperationalError, OPERATIONAL_ERROR_CODES } from "./runtime/operations.mjs";
 
 const demos = Object.freeze({
+  inventory: { label: "Inventory Hub", source: "../apps/inventory-hub.air", seed: "../data/inventory-hub.seed.json", principal: { roles: ["admin", "operator"] } },
+  reservations: { label: "Reservation Hub", source: "../apps/reservation-hub.air", seed: "../data/reservation-hub.seed.json", principal: { roles: ["admin", "operator"] } },
   customers: { label: "Northstar CRM", source: "../apps/customer-manager.air", seed: "../data/customer-manager.seed.json", principal: { roles: ["admin"] } },
   tasks: { label: "Lattice Tasks", source: "../apps/task-board.air", seed: "../data/task-board.seed.json", principal: { roles: ["admin"] } },
   expenses: { label: "Expense Approval", source: "../apps/expense-approval.air", seed: "../data/expense-approval.seed.json", principal: { actor: "users", id: "u_01", roles: ["employee"] } },

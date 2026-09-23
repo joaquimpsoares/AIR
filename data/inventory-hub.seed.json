@@ -1,0 +1,384 @@
+{
+  "products": [
+    {
+      "id": "prod_01",
+      "sku": "SKU-HUB-001",
+      "name": "USB-C Multiport Dock",
+      "category": "Electronics",
+      "unit_price": 89.99,
+      "status": "Active"
+    },
+    {
+      "id": "prod_02",
+      "sku": "SKU-KEY-002",
+      "name": "Wireless Mechanical Keyboard",
+      "category": "Electronics",
+      "unit_price": 129.50,
+      "status": "Active"
+    },
+    {
+      "id": "prod_03",
+      "sku": "SKU-MOU-003",
+      "name": "Ergonomic Precision Mouse",
+      "category": "Electronics",
+      "unit_price": 59.00,
+      "status": "Active"
+    },
+    {
+      "id": "prod_04",
+      "sku": "SKU-ARM-004",
+      "name": "Dual Monitor Arm Mount",
+      "category": "Hardware",
+      "unit_price": 149.00,
+      "status": "Active"
+    },
+    {
+      "id": "prod_05",
+      "sku": "SKU-DSK-005",
+      "name": "Electric Standing Desk Frame",
+      "category": "Hardware",
+      "unit_price": 399.00,
+      "status": "Active"
+    },
+    {
+      "id": "prod_06",
+      "sku": "SKU-CAB-006",
+      "name": "Braided Thunderbolt Cable 2m",
+      "category": "Supplies",
+      "unit_price": 29.00,
+      "status": "Active"
+    }
+  ],
+  "warehouses": [
+    {
+      "id": "wh_01",
+      "code": "WH-EAST-01",
+      "name": "East Coast Distribution Center",
+      "region": "US East",
+      "status": "Active"
+    },
+    {
+      "id": "wh_02",
+      "code": "WH-WEST-02",
+      "name": "West Coast Logistics Hub",
+      "region": "US West",
+      "status": "Active"
+    },
+    {
+      "id": "wh_03",
+      "code": "WH-EU-01",
+      "name": "Frankfurt Central Depot",
+      "region": "Europe Central",
+      "status": "Active"
+    }
+  ],
+  "inventory_balances": [
+    {
+      "id": "bal_01",
+      "product": "prod_01",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 45,
+      "quantity_reserved": 5,
+      "reorder_level": 10,
+      "status": "InStock"
+    },
+    {
+      "id": "bal_02",
+      "product": "prod_01",
+      "warehouse": "wh_02",
+      "quantity_on_hand": 18,
+      "quantity_reserved": 0,
+      "reorder_level": 10,
+      "status": "InStock"
+    },
+    {
+      "id": "bal_03",
+      "product": "prod_02",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 8,
+      "quantity_reserved": 4,
+      "reorder_level": 10,
+      "status": "LowStock"
+    },
+    {
+      "id": "bal_04",
+      "product": "prod_02",
+      "warehouse": "wh_02",
+      "quantity_on_hand": 25,
+      "quantity_reserved": 0,
+      "reorder_level": 10,
+      "status": "InStock"
+    },
+    {
+      "id": "bal_05",
+      "product": "prod_03",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 3,
+      "quantity_reserved": 0,
+      "reorder_level": 5,
+      "status": "LowStock"
+    },
+    {
+      "id": "bal_06",
+      "product": "prod_04",
+      "warehouse": "wh_01",
+      "quantity_on_hand": 12,
+      "quantity_reserved": 2,
+      "reorder_level": 5,
+      "status": "InStock"
+    },
+    {
+      "id": "bal_07",
+      "product": "prod_05",
+      "warehouse": "wh_02",
+      "quantity_on_hand": 0,
+      "quantity_reserved": 0,
+      "reorder_level": 4,
+      "status": "OutOfStock"
+    },
+    {
+      "id": "bal_08",
+      "product": "prod_06",
+      "warehouse": "wh_03",
+      "quantity_on_hand": 150,
+      "quantity_reserved": 10,
+      "reorder_level": 20,
+      "status": "InStock"
+    }
+  ],
+  "customers": [
+    {
+      "id": "cust_01",
+      "name": "Acme Corporation",
+      "email": "procurement@acme.corp",
+      "status": "Active"
+    },
+    {
+      "id": "cust_02",
+      "name": "Initech Global",
+      "email": "orders@initech.com",
+      "status": "Active"
+    },
+    {
+      "id": "cust_03",
+      "name": "Globex Systems",
+      "email": "hardware@globex.org",
+      "status": "Active"
+    },
+    {
+      "id": "cust_04",
+      "name": "Cyberdyne Solutions",
+      "email": "supply@cyberdyne.net",
+      "status": "Active"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ord_01",
+      "order_number": "ORD-2026-1001",
+      "customer": "cust_01",
+      "status": "Allocated",
+      "subtotal": 527.97,
+      "discount": 0.00,
+      "tax": 42.24,
+      "total": 570.21,
+      "created_at": "2026-09-20",
+      "updated": "2026-09-21"
+    },
+    {
+      "id": "ord_02",
+      "order_number": "ORD-2026-1002",
+      "customer": "cust_02",
+      "status": "Submitted",
+      "subtotal": 1295.00,
+      "discount": 100.00,
+      "tax": 95.60,
+      "total": 1290.60,
+      "created_at": "2026-09-21",
+      "updated": "2026-09-21"
+    },
+    {
+      "id": "ord_03",
+      "order_number": "ORD-2026-1003",
+      "customer": "cust_03",
+      "status": "Fulfilled",
+      "subtotal": 798.00,
+      "discount": 50.00,
+      "tax": 59.84,
+      "total": 807.84,
+      "created_at": "2026-09-15",
+      "updated": "2026-09-18"
+    },
+    {
+      "id": "ord_04",
+      "order_number": "ORD-2026-1004",
+      "customer": "cust_04",
+      "status": "PartiallyFulfilled",
+      "subtotal": 447.00,
+      "discount": 0.00,
+      "tax": 35.76,
+      "total": 482.76,
+      "created_at": "2026-09-19",
+      "updated": "2026-09-22"
+    },
+    {
+      "id": "ord_05",
+      "order_number": "ORD-2026-1005",
+      "customer": "cust_01",
+      "status": "Cancelled",
+      "subtotal": 179.98,
+      "discount": 0.00,
+      "tax": 14.40,
+      "total": 194.38,
+      "created_at": "2026-09-10",
+      "updated": "2026-09-11"
+    }
+  ],
+  "order_lines": [
+    {
+      "id": "line_01",
+      "order": "ord_01",
+      "product": "prod_01",
+      "quantity": 3,
+      "unit_price": 89.99,
+      "line_total": 269.97,
+      "status": "Allocated"
+    },
+    {
+      "id": "line_02",
+      "order": "ord_01",
+      "product": "prod_02",
+      "quantity": 2,
+      "unit_price": 129.00,
+      "line_total": 258.00,
+      "status": "Allocated"
+    },
+    {
+      "id": "line_03",
+      "order": "ord_02",
+      "product": "prod_02",
+      "quantity": 10,
+      "unit_price": 129.50,
+      "line_total": 1295.00,
+      "status": "Pending"
+    },
+    {
+      "id": "line_04",
+      "order": "ord_03",
+      "product": "prod_05",
+      "quantity": 2,
+      "unit_price": 399.00,
+      "line_total": 798.00,
+      "status": "Fulfilled"
+    },
+    {
+      "id": "line_05",
+      "order": "ord_04",
+      "product": "prod_04",
+      "quantity": 3,
+      "unit_price": 149.00,
+      "line_total": 447.00,
+      "status": "Allocated"
+    },
+    {
+      "id": "line_06",
+      "order": "ord_05",
+      "product": "prod_01",
+      "quantity": 2,
+      "unit_price": 89.99,
+      "line_total": 179.98,
+      "status": "Cancelled"
+    }
+  ],
+  "stock_movements": [
+    {
+      "id": "mov_01",
+      "product": "prod_01",
+      "warehouse": "wh_01",
+      "movement_type": "Receipt",
+      "quantity_delta": 50,
+      "reference": "PO-2026-901",
+      "created_at": "2026-09-01"
+    },
+    {
+      "id": "mov_02",
+      "product": "prod_01",
+      "warehouse": "wh_01",
+      "movement_type": "Sale",
+      "quantity_delta": -5,
+      "reference": "ORD-2026-0980",
+      "created_at": "2026-09-10"
+    },
+    {
+      "id": "mov_03",
+      "product": "prod_02",
+      "warehouse": "wh_01",
+      "movement_type": "Receipt",
+      "quantity_delta": 20,
+      "reference": "PO-2026-902",
+      "created_at": "2026-09-05"
+    },
+    {
+      "id": "mov_04",
+      "product": "prod_05",
+      "warehouse": "wh_02",
+      "movement_type": "Sale",
+      "quantity_delta": -2,
+      "reference": "ORD-2026-1003",
+      "created_at": "2026-09-18"
+    },
+    {
+      "id": "mov_05",
+      "product": "prod_01",
+      "warehouse": "wh_01",
+      "movement_type": "Return",
+      "quantity_delta": 1,
+      "reference": "RET-2026-001",
+      "created_at": "2026-09-19"
+    }
+  ],
+  "transfers": [
+    {
+      "id": "trf_01",
+      "product": "prod_01",
+      "source_warehouse": "wh_01",
+      "destination_warehouse": "wh_02",
+      "quantity": 10,
+      "status": "InTransit",
+      "created_at": "2026-09-21",
+      "updated": "2026-09-22"
+    },
+    {
+      "id": "trf_02",
+      "product": "prod_06",
+      "source_warehouse": "wh_03",
+      "destination_warehouse": "wh_01",
+      "quantity": 50,
+      "status": "Completed",
+      "created_at": "2026-09-10",
+      "updated": "2026-09-14"
+    }
+  ],
+  "returns": [
+    {
+      "id": "ret_01",
+      "order": "ord_03",
+      "product": "prod_05",
+      "quantity": 1,
+      "reason": "DamagedInTransit",
+      "status": "Inspected",
+      "created_at": "2026-09-20",
+      "updated": "2026-09-21"
+    },
+    {
+      "id": "ret_02",
+      "order": "ord_01",
+      "product": "prod_01",
+      "quantity": 1,
+      "reason": "Unwanted",
+      "status": "Restocked",
+      "created_at": "2026-09-19",
+      "updated": "2026-09-19"
+    }
+  ]
+}

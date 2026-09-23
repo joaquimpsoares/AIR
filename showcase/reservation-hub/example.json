@@ -1,0 +1,25 @@
+{
+  "id": "reservation-hub",
+  "title": "Reservation Hub",
+  "tagline": "Temporal interval semantics, conflict prevention, and exact money rates",
+  "description": "Multi-resource scheduling system with zero-overlap conflict enforcement, first-class hourly money rates, duration-based pricing quotes, and responsive agenda/calendar views.",
+  "difficulty": "Advanced",
+  "category": "Temporal & Operations",
+  "airEntry": "app.air",
+  "seedEntry": "seed.json",
+  "principal": { "roles": ["admin", "operator"] },
+  "capabilitiesDemonstrated": [
+    "temporal_intervals",
+    "interval_non_overlapping",
+    "money_rate_semantics",
+    "exact_duration_multiplication",
+    "schedule_agenda_artifact",
+    "capacity_invariants",
+    "guarded_lifecycle_transitions"
+  ],
+  "conventionalReference": null,
+  "conventionalStack": "Pending full measurement",
+  "benchmarkTasks": [
+    "MOD1: Change visible schedule window filter"
+  ]
+}

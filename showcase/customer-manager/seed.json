@@ -1,0 +1,49 @@
+{
+  "customers": [
+    {
+      "id": "cust_001",
+      "name": "Acme Industrial Corp",
+      "email": "contact@acme.corp",
+      "company": "Acme Corp",
+      "status": "Active",
+      "joined": "2026-01-15",
+      "notes": "Key enterprise customer with dedicated SLA."
+    },
+    {
+      "id": "cust_002",
+      "name": "Globex Robotics",
+      "email": "operations@globex.io",
+      "company": "Globex",
+      "status": "Trial",
+      "joined": "2026-03-01",
+      "notes": "Piloting warehouse automation module."
+    },
+    {
+      "id": "cust_003",
+      "name": "Initech Systems",
+      "email": "billing@initech.com",
+      "company": "Initech",
+      "status": "Active",
+      "joined": "2025-11-20",
+      "notes": "Upgraded from quarterly to annual contract."
+    },
+    {
+      "id": "cust_004",
+      "name": "Umbrella Laboratories",
+      "email": "procurement@umbrella.org",
+      "company": "Umbrella",
+      "status": "Inactive",
+      "joined": "2025-08-10",
+      "notes": "Account on hold pending compliance audit."
+    },
+    {
+      "id": "cust_005",
+      "name": "Soylent Logistics",
+      "email": "support@soylent.net",
+      "company": "Soylent",
+      "status": "Trial",
+      "joined": "2026-02-28",
+      "notes": "Evaluating multi-warehouse distribution."
+    }
+  ]
+}

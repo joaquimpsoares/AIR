@@ -1,0 +1,125 @@
+air version=2
+app inventory_hub title="Inventory Hub" subtitle="Warehouse inventory balances, order fulfillment, and stock movements" initial=overview timezone="UTC"
+theme mode=dark accent=emerald
+capability storage.local
+
+resource products label=name
+field products.sku text required unique
+field products.name text required min=2
+field products.category enum values=Electronics,Hardware,Apparel,Supplies required default=Supplies
+field products.unit_price money currency=USD required default=0
+field products.status enum values=Active,Draft,Discontinued required default=Active
+manage products lifecycle=archive
+access products view=role:admin|role:operator edit=role:admin|role:operator
+
+resource warehouses label=name
+field warehouses.code text required unique
+field warehouses.name text required min=2
+field warehouses.region text required default="North America"
+field warehouses.status enum values=Active,Inactive required default=Active
+manage warehouses lifecycle=archive
+access warehouses view=role:admin|role:operator edit=role:admin|role:operator
+
+resource inventory_balances label=product
+field inventory_balances.product ref=products required
+field inventory_balances.warehouse ref=warehouses required
+field inventory_balances.quantity_on_hand integer required default=0
+field inventory_balances.quantity_reserved integer required default=0
+field inventory_balances.reorder_level integer required default=5
+field inventory_balances.status enum values=InStock,LowStock,OutOfStock required default=InStock
+manage inventory_balances lifecycle=archive
+access inventory_balances view=role:admin|role:operator edit=role:admin|role:operator
+highlight inventory_balances.low_stock when="quantity_on_hand<=reorder_level&quantity_on_hand>0" tone=warning
+highlight inventory_balances.out_of_stock when="quantity_on_hand<=0" tone=danger
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.status enum values=Active,Suspended required default=Active
+manage customers lifecycle=archive
+access customers view=role:admin|role:operator edit=role:admin|role:operator
+
+resource orders label=order_number
+field orders.order_number text required unique
+field orders.customer ref=customers required
+field orders.status enum values=Draft,Submitted,Allocated,PartiallyFulfilled,Fulfilled,Cancelled required default=Draft
+field orders.subtotal money currency=USD required default=0
+field orders.discount money currency=USD required default=0
+field orders.tax money currency=USD required default=0
+field orders.total money currency=USD computed="subtotal - discount + tax"
+field orders.created_at date required default=today
+field orders.updated date required default=today
+manage orders lifecycle=archive
+access orders view=role:admin|role:operator edit=role:admin|role:operator
+process orders state=status initial=Draft terminal=Fulfilled,Cancelled history touch=updated
+transition orders.submit from=Draft to=Submitted action=submit by=role:operator event=submitted
+transition orders.allocate from=Submitted to=Allocated action=allocate by=role:operator event=allocated
+transition orders.partial_fulfill from=Allocated to=PartiallyFulfilled action=partial_fulfill by=role:operator event=partially_fulfilled
+transition orders.fulfill from=Allocated,PartiallyFulfilled to=Fulfilled action=fulfill by=role:operator event=fulfilled
+transition orders.cancel from=Draft,Submitted,Allocated to=Cancelled action=cancel by=role:operator comment=optional event=cancelled
+highlight orders.fulfilled when="status==Fulfilled" tone=positive
+highlight orders.cancelled when="status==Cancelled" tone=neutral
+highlight orders.allocated when="status==Allocated" tone=accent
+
+resource order_lines label=order
+field order_lines.order ref=orders required
+field order_lines.product ref=products required
+field order_lines.quantity integer required default=1 min=1
+field order_lines.unit_price money currency=USD required default=0
+field order_lines.line_total money currency=USD computed="quantity * unit_price"
+field order_lines.status enum values=Pending,Allocated,Fulfilled,Cancelled required default=Pending
+manage order_lines lifecycle=delete
+access order_lines view=role:admin|role:operator edit=role:admin|role:operator
+
+resource stock_movements label=reference
+field stock_movements.product ref=products required
+field stock_movements.warehouse ref=warehouses required
+field stock_movements.movement_type enum values=Receipt,Sale,Return,TransferIn,TransferOut,Adjustment required default=Receipt
+field stock_movements.quantity_delta integer required default=1
+field stock_movements.reference text required
+field stock_movements.created_at date required default=today
+manage stock_movements delete=false
+access stock_movements view=role:admin|role:operator edit=role:admin|role:operator
+
+resource transfers label=product
+field transfers.product ref=products required
+field transfers.source_warehouse ref=warehouses required
+field transfers.destination_warehouse ref=warehouses required
+field transfers.quantity integer required default=1 min=1
+field transfers.status enum values=Requested,InTransit,Completed,Cancelled required default=Requested
+field transfers.created_at date required default=today
+field transfers.updated date required default=today
+manage transfers lifecycle=archive
+access transfers view=role:admin|role:operator edit=role:admin|role:operator
+process transfers state=status initial=Requested terminal=Completed,Cancelled history touch=updated
+transition transfers.dispatch from=Requested to=InTransit action=dispatch by=role:operator event=dispatched
+transition transfers.complete from=InTransit to=Completed action=complete by=role:operator event=completed
+transition transfers.cancel from=Requested to=Cancelled action=cancel by=role:operator comment=optional event=cancelled
+
+resource returns label=product
+field returns.order ref=orders required
+field returns.product ref=products required
+field returns.quantity integer required default=1 min=1
+field returns.reason enum values=Defective,IncorrectItem,Unwanted,DamagedInTransit required default=Unwanted
+field returns.status enum values=Pending,Received,Inspected,Restocked,Rejected required default=Pending
+field returns.created_at date required default=today
+field returns.updated date required default=today
+manage returns lifecycle=archive
+access returns view=role:admin|role:operator edit=role:admin|role:operator
+process returns state=status initial=Pending terminal=Restocked,Rejected history touch=updated
+transition returns.receive from=Pending to=Received action=receive by=role:operator event=received
+transition returns.inspect from=Received to=Inspected action=inspect by=role:operator event=inspected
+transition returns.restock from=Inspected to=Restocked action=restock by=role:operator event=restocked
+transition returns.reject from=Inspected to=Rejected action=reject by=role:operator comment=required event=rejected
+
+overview title="Global Inventory & Orders Dashboard"
+insight products.total_products op=count where=status:Active label="Active Catalog Items"
+insight inventory_balances.total_stock op=sum field=quantity_on_hand label="Total Units On Hand"
+insight inventory_balances.low_stock_count op=count where=status:LowStock label="Low Stock Alerts"
+insight orders.open_orders op=count where="status!=Fulfilled&status!=Cancelled" label="Open Orders"
+insight orders.total_revenue op=sum field=total label="Total Billed Revenue"
+insight inventory_balances.by_warehouse op=sum group=warehouse field=quantity_on_hand label="Stock by Warehouse"
+insight products.by_category op=count group=category label="Products by Category"
+insight orders.by_status op=count group=status label="Orders by Status"
+insight orders.order_trend op=count source=events.orders where="to==Submitted" label="Order Submissions Trend"
+insight returns.return_trend op=count source=events.returns where="to==Restocked" label="Restocked Returns Trend"

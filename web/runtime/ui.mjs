@@ -20,6 +20,8 @@ import {
   SECTION_RHYTHM,
   SECTION_RELATIONSHIP,
   SECTION_RHYTHM_VALUES,
+  SCHEDULE_REPRESENTATION,
+  SCHEDULE_VIEW_MODE,
   resolveCollectionArtifactLayout,
   resolveFormArtifactLayout,
   resolveNavigationArtifactLayout,
@@ -35,7 +37,8 @@ import {
   resolveDataVisualizationLayout,
   resolveSemanticGraphLayout,
   resolveDrawerArtifactLayout,
-  resolveMenuArtifactLayout
+  resolveMenuArtifactLayout,
+  resolveScheduleArtifactLayout
 } from "./ui_hierarchy.mjs";
 import {
   VISUAL_INTENTS,
@@ -45,7 +48,12 @@ import {
   compileVisualizationIR,
   compileWorkflowGraph,
   compileTimelineGraph,
-  compileDagGraph
+  compileDagGraph,
+  compileScheduleVisualizationIR,
+  compileScheduleIR,
+  getZonedDateParts,
+  addDaysToDateString,
+  formatDisplayDate
 } from "./visualization_ir.mjs";
 import {
   renderDataVisualization,
@@ -72,7 +80,9 @@ const ICONS = Object.freeze({
   sort: '<path d="m8 9 4-4 4 4M16 15l-4 4-4-4"/>',
   spark: '<path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3ZM5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9L5 15Z"/>',
   lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>',
+  warning: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3ZM12 9v4M12 17h.01"/>'
 });
 
 function icon(name, size = 18) {
@@ -111,10 +121,22 @@ function initials(value) {
   return String(value).split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
-function themePreference(theme) {
-  if (typeof localStorage !== "undefined") {
-    const saved = localStorage.getItem("air:theme");
-    if (saved === "light" || saved === "dark") return saved;
+export function isInteractiveRowTarget(target) {
+  if (!target || typeof target.closest !== "function") return false;
+  return Boolean(target.closest("button, a, select, input, textarea, [role='button'], [data-row-action-menu], [role='menuitem'], [data-menu-action], [data-dismiss-menu], [data-drawer-overflow-menu]"));
+}
+
+export function resolveThemeMode(mode) {
+  if (mode === "light" || mode === "dark") return mode;
+  if (typeof matchMedia !== "undefined") {
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return "light";
+}
+
+function themePreference(theme, options = {}) {
+  if (options.userThemeOverride === "light" || options.userThemeOverride === "dark") {
+    return options.userThemeOverride;
   }
   if (theme?.mode && theme.mode !== "system") return theme.mode;
   if (typeof matchMedia !== "undefined") {
@@ -123,8 +145,32 @@ function themePreference(theme) {
   return "light";
 }
 
-export function renderFatalError(root, error) {
+export function classifyAirError(error) {
+  if (!error) return "UNKNOWN_ERROR";
+  if (error.phase === "parse" || error.name === "AirParseError") return "COMPILE_ERROR";
+  if (error.phase === "validate" || error.phase === "resolve") return "CONFIG_ERROR";
+  if (error.phase === "data" || (typeof error.message === "string" && error.message.includes("seed"))) return "DATA_ERROR";
+  if (error.code === "AIR_AUTH_FORBIDDEN" || error.code === "AIR_AUTH_UNAUTHORIZED") return "ACCESS_DENIED";
+  return "RUNTIME_ERROR";
+}
+
+export function renderFatalError(root, error, options = {}) {
+  if (!root) return;
   root.removeAttribute("aria-busy");
+  const classification = classifyAirError(error);
+  const reference = error?.requestId || error?.incidentId || `ref_${Date.now().toString(36)}`;
+  
+  // Structured internal developer diagnostics
+  console.error(`[AIR ${classification}] Startup Exception:`, {
+    error,
+    classification,
+    code: error?.code ?? null,
+    phase: error?.phase ?? null,
+    message: error?.message ?? String(error),
+    reference,
+    stack: error?.stack ?? null
+  });
+
   let userError = null;
   if (error && typeof error.toUserError === "function") {
     userError = error.toUserError();
@@ -132,7 +178,7 @@ export function renderFatalError(root, error) {
     userError = {
       title: error.safeUserTitle || "Application Unavailable",
       message: error.safeUserMessage || "The application encountered an operational error.",
-      reference: error.requestId || error.incidentId || `ref_${Date.now()}`
+      reference
     };
   } else {
     const rawMsg = error?.message ?? String(error);
@@ -140,11 +186,22 @@ export function renderFatalError(root, error) {
     userError = {
       title: is404 ? "Application Unavailable" : "Application Error",
       message: is404 ? "The application definition could not be loaded." : "This application could not start.",
-      reference: `ref_${Date.now().toString(36)}`
+      reference
     };
   }
 
-  root.innerHTML = `<main class="fatal"><div class="fatal-mark">!</div><p class="eyebrow">AIR Service State</p><h1>${escapeHtml(userError.title)}</h1><p>${escapeHtml(userError.message)}</p><p class="meta" style="font-size: 0.85em; opacity: 0.75;">Reference: <code>${escapeHtml(userError.reference)}</code></p><button class="button secondary" onclick="location.reload()">Try again</button></main>`;
+  root.innerHTML = `<main class="fatal"><div class="fatal-mark">!</div><p class="eyebrow">AIR Service State</p><h1>${escapeHtml(userError.title)}</h1><p>${escapeHtml(userError.message)}</p><p class="meta" style="font-size: 0.85em; opacity: 0.75;">Reference: <code>${escapeHtml(userError.reference)}</code></p><button class="button secondary" data-retry-button>Try again</button></main>`;
+  
+  const retryBtn = root.querySelector("[data-retry-button]");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      if (typeof options.onRetry === "function") {
+        options.onRetry();
+      } else if (typeof location !== "undefined") {
+        location.reload();
+      }
+    });
+  }
 }
 
 /**
@@ -154,6 +211,12 @@ export function renderFatalError(root, error) {
  */
 export function renderPresentation(root, initialPresentationIr, runtime, options = {}) {
   let presentationIr = initialPresentationIr;
+  const isEmbedded = options.mode === "embedded" || (root && root.id === "live-app-root") || (root && typeof root.classList?.contains === "function" && root.classList.contains("live-app-wrapper"));
+  const hostMode = isEmbedded ? "embedded" : (options.mode ?? "standalone");
+  if (isEmbedded && root && typeof root.classList?.add === "function") {
+    root.classList.add("app-host-embedded");
+  }
+
   const authAdapter = options.authAdapter ?? new DemoAuthAdapter();
 
   let visualDesignIr = compileVisualDesign(
@@ -161,11 +224,11 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     options.designIntent ?? options.model?.design ?? {},
     {
       prefersReducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
-      viewport: typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop"
+      viewport: (root?.clientWidth ? root.clientWidth : (typeof window !== "undefined" ? window.innerWidth : 1024)) < 768 ? "mobile" : "desktop"
     }
   );
 
-  const initialWidth = options.containerWidth ?? (typeof window !== "undefined" ? window.innerWidth : 1024);
+  const initialWidth = options.containerWidth ?? (root?.clientWidth ? root.clientWidth : (typeof window !== "undefined" ? window.innerWidth : 1024));
 
   const state = {
     screenId: options.initialScreen ?? presentationIr.app.initialScreen,
@@ -180,7 +243,18 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     toastTimer: null,
     compilerStep: 1,
     mobileMenuOpen: false,
-    authState: { status: "idle", message: "", email: "", demoToken: "" }
+    authState: { status: "idle", message: "", email: "", demoToken: "" },
+    scheduleState: {
+      currentDate: options.currentDate ?? new Date().toISOString().slice(0, 10),
+      viewMode: options.scheduleViewMode ?? "day",
+      timezone: options.timezone ?? presentationIr.app?.timezone ?? "UTC",
+      selectedGroup: "",
+      selectedStatus: "",
+      hideCancelled: false,
+      linearView: false
+    },
+    screenViewMode: new Map(),
+    notificationCenterOpen: false
   };
 
   const currentScreen = () => presentationIr.screens.find((s) => s.id === state.screenId) ?? presentationIr.screens[0];
@@ -198,13 +272,21 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
   };
 
   function applyTheme() {
-    if (typeof document === "undefined") return;
-    document.documentElement.dataset.theme = state.theme;
-    document.documentElement.dataset.accent = presentationIr.theme.accent;
-    document.documentElement.dataset.density = visualDesignIr.theme.density;
-    document.documentElement.dataset.character = visualDesignIr.character;
-    document.documentElement.dataset.archetype = visualDesignIr.archetype;
-    document.documentElement.style.colorScheme = state.theme;
+    const target = (isEmbedded && root) ? root : (typeof document !== "undefined" ? document.documentElement : null);
+    if (!target) return;
+    if (target.dataset) {
+      target.dataset.theme = state.theme;
+      target.dataset.accent = presentationIr.theme.accent;
+      target.dataset.density = visualDesignIr.theme.density;
+      target.dataset.character = visualDesignIr.character;
+      target.dataset.archetype = visualDesignIr.archetype;
+    }
+    if (target.style) {
+      target.style.colorScheme = state.theme;
+    }
+    if (isEmbedded && root && typeof root.setAttribute === "function") {
+      root.setAttribute("data-air-theme-host", "true");
+    }
   }
 
   function recompileIr() {
@@ -215,7 +297,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         options.designIntent ?? options.model?.design ?? {},
         {
           prefersReducedMotion: typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches,
-          viewport: typeof window !== "undefined" && window.innerWidth < 768 ? "mobile" : "desktop"
+          viewport: state.containerWidth < 768 ? "mobile" : "desktop"
         }
       );
     }
@@ -228,18 +310,18 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     state.drawer = null;
     state.openMenu = null;
     state.confirm = null;
-    if (typeof history !== "undefined" && typeof location !== "undefined") {
+    if (!isEmbedded && typeof history !== "undefined" && typeof location !== "undefined") {
       history.replaceState(null, "", `${location.pathname}?demo=${encodeURIComponent(options.demo ?? "demo")}#${screenId}`);
     }
     render();
-    if (typeof document !== "undefined") {
-      document.querySelector(".content")?.focus({ preventScroll: true });
+    if (root) {
+      root.querySelector(".content")?.focus({ preventScroll: true });
     }
   }
 
   function notify(message, tone = "success") {
-    if (typeof document === "undefined") return;
-    const host = document.querySelector("#air-toast");
+    if (!root) return;
+    const host = root.querySelector?.("#air-toast") || (typeof document !== "undefined" ? document.querySelector("#air-toast") : null);
     if (!host) return;
     host.className = `toast ${tone} visible`;
     host.innerHTML = `<span class="toast-dot"></span>${escapeHtml(message)}`;
@@ -292,7 +374,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         ${columns.map((fieldId) => `<td data-field="${escapeHtml(fieldId)}">${valueMarkup(screen, fieldId, record[fieldId])}</td>`).join("")}
         ${interactive && screen?.resource ? `
           <td class="row-actions" style="text-align: right; width: 44px;">
-            <button class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
+            <button type="button" class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
               ${icon("menu", 16)}
             </button>
           </td>` : (interactive ? `<td class="row-arrow" aria-label="View record">${icon("chevron", 16)}</td>` : "")}
@@ -328,7 +410,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
             ${interactive && screen?.resource ? `
-              <button class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
+              <button type="button" class="action-menu-button" data-row-action-menu="${escapeHtml(screen.resource)}:${escapeHtml(record.id)}" aria-label="Actions for ${escapeHtml(record[screen.labelField] ?? record.id)}" aria-haspopup="menu" aria-expanded="${isMenuOpen}">
                 ${icon("menu", 16)}
               </button>` : ""}
             ${interactive ? `<span class="card-arrow" aria-hidden="true">${icon("chevron", 16)}</span>` : ""}
@@ -501,8 +583,15 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       collectionContent = renderTable(screen, screen.collection.columns, result.records);
     }
 
+    const viewToggle = screen.schedule
+      ? `<div class="screen-view-toggle"><button type="button" class="view-toggle-btn active" data-screen-view="collection">Table</button><button type="button" class="view-toggle-btn" data-screen-view="schedule">Schedule</button></div>`
+      : "";
+
     return `<div class="section-stack" data-section-rhythm="comfortable">
-      <div class="page-heading collection-heading"><div><p class="eyebrow">${escapeHtml(screen.title)}</p><h1>${escapeHtml(screen.title)}</h1><p>Manage ${escapeHtml(screen.title.toLowerCase())}</p></div>${createButton}</div>
+      <div class="page-heading collection-heading">
+        <div><p class="eyebrow">${escapeHtml(screen.title)}</p><h1>${escapeHtml(screen.title)}</h1><p>Manage ${escapeHtml(screen.title.toLowerCase())}</p></div>
+        <div style="display: flex; align-items: center; gap: 8px;">${viewToggle}${createButton}</div>
+      </div>
       <section class="panel collection-panel" data-section-role="collection" data-section-relationship="independent" data-collection-representation="${escapeHtml(layoutDecision.representation || layoutDecision.mode)}">
         <div class="toolbar">
           <label class="search-control">${icon("search", 17)}<span class="sr-only">Search ${escapeHtml(screen.title)}</span><input type="search" data-search placeholder="Search ${escapeHtml(screen.title.toLowerCase())}…" value="${escapeHtml(query.search)}"></label>
@@ -513,6 +602,278 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         <div class="pagination"><span>${from}–${to} of ${result.total}</span><div><button class="icon-button" data-page="${result.page - 1}" ${result.page <= 1 ? "disabled" : ""} aria-label="Previous page">${icon("back", 16)}</button><span>Page ${result.page} of ${result.totalPages}</span><button class="icon-button next" data-page="${result.page + 1}" ${result.page >= result.totalPages ? "disabled" : ""} aria-label="Next page">${icon("chevron", 16)}</button></div></div>
       </section>
     </div>`;
+  }
+
+  function renderSchedule(screen) {
+    const scheduleSpec = {
+      ...(screen.schedule ?? { resource: screen.resource }),
+      currentDate: state.scheduleState.currentDate,
+      viewMode: state.scheduleState.viewMode,
+      timezone: state.scheduleState.timezone || screen.schedule?.timezone || "UTC",
+      containerWidth: state.containerWidth,
+      filter: {
+        ...(state.scheduleState.selectedGroup ? { [screen.schedule?.groupField ?? "resource"]: state.scheduleState.selectedGroup } : {}),
+        ...(state.scheduleState.selectedStatus ? { [screen.schedule?.statusField ?? "status"]: state.scheduleState.selectedStatus } : {})
+      },
+      hideCancelled: state.scheduleState.hideCancelled,
+      clock: options.clock ?? options.now
+    };
+
+    const scheduleIr = compileScheduleVisualizationIR(scheduleSpec, [], { runtime, now: options.clock ?? options.now, containerWidth: state.containerWidth });
+    const isAgenda = scheduleIr.representation === SCHEDULE_REPRESENTATION.AGENDA_LIST;
+
+    // Group filter options
+    const allGroups = scheduleIr.groups;
+    const groupFilterOptions = allGroups.map((g) => `<option value="${escapeHtml(g.id)}" ${state.scheduleState.selectedGroup === g.id ? "selected" : ""}>${escapeHtml(g.label)}</option>`).join("");
+
+    // Date Navigation Header
+    const dateToolbar = `
+      <div class="schedule-toolbar">
+        <div class="schedule-nav-group">
+          <button type="button" class="button secondary compact" data-schedule-nav="today">Today</button>
+          <div class="icon-button-group">
+            <button type="button" class="icon-button" data-schedule-nav="prev" aria-label="Previous date">${icon("back", 16)}</button>
+            <button type="button" class="icon-button next" data-schedule-nav="next" aria-label="Next date">${icon("chevron", 16)}</button>
+          </div>
+          <h2 class="schedule-date-title" aria-live="polite">${escapeHtml(scheduleIr.navigation.rangeLabel)}</h2>
+        </div>
+        <div class="schedule-actions-group">
+          <label class="select-control group-select">
+            <span class="sr-only">Filter by Resource</span>
+            <select data-schedule-filter-group>
+              <option value="">All ${escapeHtml((screen.schedule?.groupResource ?? "resources").toLowerCase())}</option>
+              ${groupFilterOptions}
+            </select>
+          </label>
+          <div class="view-mode-toggle" role="group" aria-label="View mode">
+            <button type="button" class="view-toggle-btn ${scheduleIr.viewMode === "day" ? "active" : ""}" data-schedule-view="day">Day</button>
+            <button type="button" class="view-toggle-btn ${scheduleIr.viewMode === "week" ? "active" : ""}" data-schedule-view="week">Week</button>
+          </div>
+          <button type="button" class="button secondary compact" data-schedule-linear-toggle aria-label="Toggle accessible schedule list">
+            ${icon("collection", 14)} List
+          </button>
+          <button type="button" class="button primary compact" data-create="${escapeHtml(screen.resource)}">
+            ${icon("plus", 14)} Add
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Linearized accessible data table toggle (PART 28 & PART 30)
+    let linearTableMarkup = "";
+    if (state.scheduleState.linearView) {
+      linearTableMarkup = `
+        <div class="schedule-accessible-table" role="region" aria-label="Linear Schedule Table">
+          <table class="table-view">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Resource</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Quote / Amount</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scheduleIr.accessibleTableRows.map((row) => `
+                <tr>
+                  <td><code>${escapeHtml(row.timeRange)}</code></td>
+                  <td><strong>${escapeHtml(row.group)}</strong></td>
+                  <td>${escapeHtml(row.title)}</td>
+                  <td><span class="badge ${statusTone(row.status)}">${escapeHtml(displayStatus(row.status))}</span></td>
+                  <td>${escapeHtml(row.quote)}</td>
+                  <td><button class="button secondary compact" data-detail="${escapeHtml(screen.resource)}:${escapeHtml(row.id)}">View</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    let scheduleBody = "";
+
+    if (state.scheduleState.linearView) {
+      scheduleBody = linearTableMarkup;
+    } else if (scheduleIr.isEmpty) {
+      scheduleBody = `
+        <div class="empty-state">
+          <div>${icon("calendar", 26)}</div>
+          <h3>${escapeHtml(scheduleIr.emptyState.title)}</h3>
+          <p>${escapeHtml(scheduleIr.emptyState.message)}</p>
+          <button class="button primary" data-create="${escapeHtml(screen.resource)}">${icon("plus", 16)} Add</button>
+        </div>
+      `;
+    } else if (isAgenda) {
+      // -------------------------------------------------------------
+      // AGENDA LIST REPRESENTATION (< 640px Mobile)
+      // -------------------------------------------------------------
+      const itemsByDate = new Map();
+      for (const item of scheduleIr.allIntervals) {
+        if (!itemsByDate.has(item.dateString)) itemsByDate.set(item.dateString, []);
+        itemsByDate.get(item.dateString).push(item);
+      }
+
+      const agendaSections = Array.from(itemsByDate.entries()).map(([dateStr, dayItems]) => {
+        const dateHeader = formatDisplayDate(dateStr, scheduleIr.timezone, "day");
+        const cards = dayItems.map((item) => {
+          if (item.isBlackout) {
+            return `
+              <div class="schedule-agenda-card blackout" role="article" aria-label="${escapeHtml(item.title)} blackout">
+                <div class="agenda-card-time"><span class="badge danger">${escapeHtml(item.timeRangeLabel)}</span></div>
+                <div class="agenda-card-main">
+                  <span class="agenda-group-chip">${escapeHtml(item.groupLabel)}</span>
+                  <strong class="agenda-card-title">${escapeHtml(item.title)}</strong>
+                  <span class="agenda-status-pill blocked">Unavailable</span>
+                </div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="schedule-agenda-card" role="button" tabindex="0" data-detail="${escapeHtml(item.entityId)}:${escapeHtml(item.recordId)}" aria-label="${escapeHtml(item.title)} on ${escapeHtml(item.groupLabel)}">
+              <div class="agenda-card-time"><span class="badge neutral">${escapeHtml(item.timeRangeLabel)}</span></div>
+              <div class="agenda-card-main">
+                <span class="agenda-group-chip">${escapeHtml(item.groupLabel)}</span>
+                <strong class="agenda-card-title">${escapeHtml(item.title)}</strong>
+                <div class="agenda-card-footer">
+                  <span class="badge ${statusTone(item.status)}">${escapeHtml(displayStatus(item.status))}</span>
+                  ${item.quote ? `<span class="agenda-quote">${escapeHtml(item.quote)}</span>` : ""}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        return `
+          <div class="agenda-day-group">
+            <h3 class="agenda-day-heading">${escapeHtml(dateHeader)}</h3>
+            <div class="agenda-cards-list">${cards}</div>
+          </div>
+        `;
+      }).join("");
+
+      scheduleBody = `<div class="schedule-agenda-container" role="feed" aria-label="Chronological Schedule Agenda">${agendaSections}</div>`;
+    } else {
+      // -------------------------------------------------------------
+      // RESOURCE TIME GRID (Wide >= 1024px & Medium 640-1023px)
+      // -------------------------------------------------------------
+      const timeAxisMarkup = scheduleIr.timeAxisTicks.map((t) => `
+        <div class="time-tick" style="left: ${t.percent}%;">
+          <span class="time-tick-label">${escapeHtml(t.label)}</span>
+        </div>
+      `).join("");
+
+      const rowsMarkup = scheduleIr.groups.map((group) => {
+        const groupItems = scheduleIr.allIntervals.filter((it) => it.groupId === group.id);
+
+        const blocksMarkup = groupItems.map((item) => {
+          const subLaneHeight = item.totalSubLanes > 1 ? Math.floor(100 / item.totalSubLanes) - 4 : 88;
+          const subLaneTop = item.totalSubLanes > 1 ? item.subLane * Math.floor(100 / item.totalSubLanes) + 4 : 6;
+
+          if (item.isBlackout) {
+            return `
+              <div class="schedule-block blackout"
+                style="left: ${item.leftPercent}%; width: ${item.widthPercent}%; top: ${subLaneTop}%; height: ${subLaneHeight}%;"
+                title="Blackout: ${escapeHtml(item.title)} (${escapeHtml(item.timeRangeLabel)})"
+                role="article"
+                aria-label="Blackout: ${escapeHtml(item.title)} (${escapeHtml(item.timeRangeLabel)})">
+                <span class="block-title">${escapeHtml(item.title)}</span>
+                <span class="block-time">${escapeHtml(item.timeRangeLabel)}</span>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="schedule-block tone-${escapeHtml(item.tone)}"
+              style="left: ${item.leftPercent}%; width: ${item.widthPercent}%; top: ${subLaneTop}%; height: ${subLaneHeight}%;"
+              tabindex="0"
+              role="button"
+              data-detail="${escapeHtml(item.entityId)}:${escapeHtml(item.recordId)}"
+              title="${escapeHtml(item.title)} (${escapeHtml(item.timeRangeLabel)})"
+              aria-label="${escapeHtml(item.title)}, ${escapeHtml(item.groupLabel)}, ${escapeHtml(item.timeRangeLabel)}, ${escapeHtml(item.status)}">
+              <span class="block-title">${escapeHtml(item.title)}</span>
+              <div class="block-meta">
+                <span class="block-time">${escapeHtml(item.timeRangeLabel)}</span>
+                ${item.quote ? `<span class="block-quote">${escapeHtml(item.quote)}</span>` : ""}
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        // Empty clickable slots for grid slot booking (PART 12)
+        const emptySlots = [];
+        for (let h = scheduleIr.displayStartHour; h < scheduleIr.displayEndHour; h += 2) {
+          const slotStart = `${scheduleIr.currentDate}T${String(h).padStart(2, "0")}:00:00.000Z`;
+          const slotEnd = `${scheduleIr.currentDate}T${String(h + 2).padStart(2, "0")}:00:00.000Z`;
+          const slotPercent = ((h - scheduleIr.displayStartHour) / (scheduleIr.displayEndHour - scheduleIr.displayStartHour)) * 100;
+          const slotWidth = (2 / (scheduleIr.displayEndHour - scheduleIr.displayStartHour)) * 100;
+          emptySlots.push(`
+            <div class="schedule-empty-slot"
+              style="left: ${slotPercent}%; width: ${slotWidth}%;"
+              data-create-slot="${escapeHtml(group.id)}:${escapeHtml(slotStart)}:${escapeHtml(slotEnd)}"
+              title="Click to book ${escapeHtml(group.label)} at ${String(h).padStart(2, "0")}:00"
+              aria-label="Available slot ${escapeHtml(group.label)} at ${String(h).padStart(2, "0")}:00">
+            </div>
+          `);
+        }
+
+        return `
+          <div class="schedule-grid-row" data-group-id="${escapeHtml(group.id)}">
+            <div class="row-group-label" title="${escapeHtml(group.label)}">
+              <strong>${escapeHtml(group.label)}</strong>
+            </div>
+            <div class="row-lane">
+              ${emptySlots.join("")}
+              ${blocksMarkup}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Current time indicator line (PART 19)
+      const nowLineMarkup = scheduleIr.nowMarker.visible ? `
+        <div class="schedule-now-line" style="left: ${scheduleIr.nowMarker.percent}%;" title="Current Time: ${escapeHtml(scheduleIr.nowMarker.timeLabel)}">
+          <span class="now-pill">${escapeHtml(scheduleIr.nowMarker.timeLabel)}</span>
+        </div>
+      ` : "";
+
+      scheduleBody = `
+        <div class="schedule-grid-container" data-representation="${escapeHtml(scheduleIr.representation)}">
+          <div class="schedule-grid-header">
+            <div class="corner-cell">${escapeHtml(screen.schedule?.groupResource ? titleCase(screen.schedule.groupResource) : "Resource")}</div>
+            <div class="time-axis-lane">
+              ${timeAxisMarkup}
+              ${nowLineMarkup}
+            </div>
+          </div>
+          <div class="schedule-grid-body">
+            ${rowsMarkup}
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="section-stack" data-section-rhythm="comfortable">
+        <div class="page-heading schedule-page-heading">
+          <div>
+            <p class="eyebrow">${escapeHtml(screen.title)}</p>
+            <h1>${escapeHtml(screen.title)}</h1>
+            <p>Schedule and resource allocation</p>
+          </div>
+          <div class="screen-view-toggle">
+            <button type="button" class="view-toggle-btn" data-screen-view="collection">Table</button>
+            <button type="button" class="view-toggle-btn active" data-screen-view="schedule">Schedule</button>
+          </div>
+        </div>
+        <section class="panel schedule-panel" data-section-role="schedule" data-section-relationship="independent" data-schedule-representation="${escapeHtml(scheduleIr.representation)}">
+          ${dateToolbar}
+          ${scheduleBody}
+        </section>
+      </div>
+    `;
   }
 
   function renderWorkflowInbox(screen) {
@@ -1345,9 +1706,40 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     if (screen.type === "account_security") return renderAccountSecurity(screen);
     if (screen.type === "user_management") return renderUserManagement(screen);
     if (screen.type === "dashboard") return renderDashboard(screen);
-    if (screen.type === "resource_management") return renderCollection(screen);
+    if (screen.type === "schedule") return renderSchedule(screen);
+    if (screen.type === "resource_management") {
+      const viewMode = state.screenViewMode.get(screen.id);
+      if (viewMode === "schedule" && screen.schedule) {
+        return renderSchedule(screen);
+      }
+      return renderCollection(screen);
+    }
     if (screen.type === "workflow_inbox") return renderWorkflowInbox(screen);
     return `<div class="panel"><h2>Screen ${escapeHtml(screen.title)}</h2></div>`;
+  }
+
+  function hydrateEditorValues(screen, record) {
+    if (!record || !screen) return {};
+    const values = {};
+    for (const field of screen.editor?.fields ?? []) {
+      const rawVal = record[field.id];
+      if (rawVal === undefined || rawVal === null) {
+        values[field.id] = field.defaultValue ?? "";
+      } else if (field.type === "money") {
+        values[field.id] = typeof rawVal === "number" ? rawVal.toFixed(2) : String(rawVal);
+      } else if (field.type === "bool") {
+        values[field.id] = Boolean(rawVal);
+      } else if (field.type === "ratio") {
+        values[field.id] = typeof rawVal === "object" && rawVal !== null && typeof rawVal.toString === "function" ? rawVal.toString() : String(rawVal);
+      } else if (field.type === "integer") {
+        values[field.id] = rawVal !== undefined && rawVal !== null ? String(rawVal) : "";
+      } else if (field.type === "date" || field.type === "datetime") {
+        values[field.id] = typeof rawVal === "string" ? rawVal : (rawVal instanceof Date ? rawVal.toISOString().slice(0, 10) : String(rawVal));
+      } else {
+        values[field.id] = rawVal;
+      }
+    }
+    return values;
   }
 
   function inputFor(screen, field, value, error) {
@@ -1364,29 +1756,32 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     } else if (field.type === "bool") {
       control = `<label class="checkbox"><input ${common} type="checkbox" ${value ? "checked" : ""}> Enabled</label>`;
     } else {
-      const type = field.type === "phone" ? "tel" : field.type === "money" ? "number" : ["email", "date", "number"].includes(field.type) ? field.type : "text";
-      control = `<input ${common} type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder)}" ${field.min ? `minlength="${field.min}"` : ""} ${field.type === "money" ? 'step="0.01"' : ""}>`;
+      const type = field.type === "phone" ? "tel" : (field.type === "money" || field.type === "number" || field.type === "integer") ? "number" : ["email", "date"].includes(field.type) ? field.type : "text";
+      const stepAttr = field.type === "money" ? 'step="0.01"' : field.type === "integer" ? 'step="1"' : "";
+      const minAttr = field.min !== undefined && field.min !== null ? (["number", "integer", "money"].includes(field.type) ? `min="${field.min}"` : `minlength="${field.min}"`) : "";
+      const maxAttr = field.max !== undefined && field.max !== null ? (["number", "integer", "money"].includes(field.type) ? `max="${field.max}"` : `maxlength="${field.max}"`) : "";
+      control = `<input ${common} type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder)}" ${minAttr} ${maxAttr} ${stepAttr}>`;
     }
     return `<label class="field ${field.type === "text" && field.long ? "span-2" : ""}" for="${id}"><span>${escapeHtml(field.label)}${field.required ? '<i aria-hidden="true">*</i>' : ""}</span>${control}${error ? `<small class="field-error" id="${id}-error">${escapeHtml(error)}</small>` : ""}</label>`;
   }
 
   function renderDrawer() {
     if (!state.drawer) return "";
-    const { purpose, entityId, recordId, size = DRAWER_SIZE.STANDARD } = state.drawer;
+    const { purpose, entityId, recordId, size = DRAWER_SIZE.STANDARD, status = "open" } = state.drawer;
     const drawerDecision = resolveDrawerArtifactLayout(state.containerWidth, size);
     const formDecision = resolveFormArtifactLayout(state.containerWidth);
     const screen = presentationIr.screens.find((s) => s.resource === entityId);
 
     if (purpose === "create" || purpose === "edit") {
       const editing = Boolean(recordId);
-      const record = editing && runtime ? runtime.records(screen.resource).find((item) => item.id === recordId) : {};
-      const values = state.drawer.values ?? record ?? {};
+      const record = editing && runtime ? (runtime.get(screen?.resource, recordId) ?? runtime.records(screen?.resource)?.find((item) => item.id === recordId)) : {};
+      const values = state.drawer.values ?? (editing ? hydrateEditorValues(screen, record) : {});
       const fields = editing && runtime
-        ? runtime.editableFields(screen.resource, record).map((f) => screen.editor.fields.find((ef) => ef.id === f.id)).filter(Boolean)
+        ? runtime.editableFields(screen?.resource, record).map((f) => screen?.editor?.fields?.find((ef) => ef.id === f.id)).filter(Boolean)
         : (screen?.editor?.fields ?? []).filter((field) => !field.readOnly && field.id !== "workflow_status");
 
-      return `<div class="drawer-backdrop" data-dismiss-drawer>
-        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}">
+      return `<div class="drawer-backdrop" data-dismiss-drawer data-status="${escapeHtml(status)}">
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}" data-status="${escapeHtml(status)}">
           <header class="drawer-header">
             <div>
               <p class="eyebrow">${editing ? "Update record" : "New record"}</p>
@@ -1397,7 +1792,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
           <div class="drawer-body">
             <form id="drawer-record-form" data-entity="${escapeHtml(screen?.resource ?? entityId)}" data-record="${escapeHtml(recordId ?? "")}" novalidate>
               <div class="form-grid ${formDecision.representation === FORM_REPRESENTATION.SINGLE_COLUMN ? "single-column" : "multi-column"}">
-                ${fields.map((field) => inputFor(screen, field, values[field.id] ?? field.defaultValue ?? "", state.drawer.errors?.[field.id])).join("")}
+                ${fields.map((field) => inputFor(screen, field, values[field.id] ?? (editing ? "" : (field.defaultValue ?? "")), state.drawer.errors?.[field.id])).join("")}
               </div>
             </form>
           </div>
@@ -1417,13 +1812,105 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       }
       const title = runtime ? runtime.displayValue(entityId, screen.labelField, record[screen.labelField]) : record.id;
       const editAllowed = runtime ? runtime.can(entityId, "edit", record) && runtime.editableFields(entityId, record).length > 0 : true;
-      const editButton = editAllowed ? `<button class="button secondary" data-drawer-edit="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("edit", 16)} Edit</button>` : "";
-      
+
+      // Classify transitions & actions per Drawer Action Policy
+      const availableTransitions = runtime ? runtime.availableActions(entityId, recordId) : [];
       const deleteAction = screen.actions?.find((a) => a.intent === "delete" || a.intent === "archive");
       const canDelete = runtime ? runtime.can(entityId, deleteAction?.intent ?? "delete", record) : true;
-      const deleteButton = canDelete ? `<button class="button danger-ghost" data-delete="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("trash", 16)} ${escapeHtml(deleteAction?.label ?? "Delete")}</button>` : "";
-      
-      const workflowActions = runtime ? runtime.availableActions(entityId, recordId).map((action) => `<button class="button primary" data-transition="${escapeHtml(action.action)}" data-comment="${escapeHtml(action.comment)}">${escapeHtml(action.label)}</button>`).join("") : "";
+
+      const isDestructiveAction = (actionName) => {
+        const s = actionName.toLowerCase();
+        return ["cancel", "reject", "deny", "terminate", "delete", "archive", "mark_no_show", "no_show"].includes(s);
+      };
+
+      const forwardTransitions = availableTransitions.filter((a) => !isDestructiveAction(a.action));
+      const destructiveTransitions = availableTransitions.filter((a) => isDestructiveAction(a.action));
+
+      let primaryAction = null;
+      let secondaryAction = null;
+      const overflowList = [];
+
+      if (forwardTransitions.length > 0) {
+        primaryAction = {
+          type: "transition",
+          action: forwardTransitions[0].action,
+          label: forwardTransitions[0].label,
+          comment: forwardTransitions[0].comment,
+          tone: "primary"
+        };
+        if (editAllowed) {
+          secondaryAction = {
+            type: "edit",
+            label: "Edit",
+            icon: "edit"
+          };
+        } else if (forwardTransitions.length > 1) {
+          secondaryAction = {
+            type: "transition",
+            action: forwardTransitions[1].action,
+            label: forwardTransitions[1].label,
+            comment: forwardTransitions[1].comment,
+            tone: "secondary"
+          };
+        }
+        for (let i = (secondaryAction?.type === "transition" ? 2 : 1); i < forwardTransitions.length; i++) {
+          overflowList.push({
+            type: "transition",
+            action: forwardTransitions[i].action,
+            label: forwardTransitions[i].label,
+            comment: forwardTransitions[i].comment,
+            tone: "neutral"
+          });
+        }
+      } else if (editAllowed) {
+        primaryAction = {
+          type: "edit",
+          label: "Edit",
+          icon: "edit"
+        };
+      }
+
+      if (destructiveTransitions.length > 0 || (canDelete && deleteAction)) {
+        if (overflowList.length > 0) {
+          overflowList.push({ separator: true });
+        }
+        for (const dt of destructiveTransitions) {
+          overflowList.push({
+            type: "transition",
+            action: dt.action,
+            label: dt.label,
+            comment: dt.comment,
+            tone: "destructive",
+            icon: "trash"
+          });
+        }
+        if (canDelete && deleteAction) {
+          overflowList.push({
+            type: "delete",
+            label: deleteAction.label ?? "Delete",
+            icon: "trash",
+            tone: "destructive"
+          });
+        }
+      }
+
+      state.drawer.overflowActions = overflowList;
+
+      const primaryMarkup = primaryAction ? (
+        primaryAction.type === "transition"
+          ? `<button class="button primary" data-transition="${escapeHtml(primaryAction.action)}" data-comment="${escapeHtml(primaryAction.comment)}">${escapeHtml(primaryAction.label)}</button>`
+          : `<button class="button primary" data-drawer-edit="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("edit", 16)} Edit</button>`
+      ) : "";
+
+      const secondaryMarkup = secondaryAction ? (
+        secondaryAction.type === "transition"
+          ? `<button class="button secondary" data-transition="${escapeHtml(secondaryAction.action)}" data-comment="${escapeHtml(secondaryAction.comment)}">${escapeHtml(secondaryAction.label)}</button>`
+          : `<button class="button secondary" data-drawer-edit="${escapeHtml(entityId)}:${escapeHtml(recordId)}">${icon("edit", 16)} Edit</button>`
+      ) : "";
+
+      const overflowMarkup = overflowList.length > 0 ? (
+        `<button class="button secondary icon-only" data-drawer-overflow-menu aria-label="More actions" title="More actions">${icon("menu", 16)}</button>`
+      ) : "";
 
       const history = runtime ? runtime.history(entityId, recordId) : [];
       let workflowGraphMarkup = "";
@@ -1433,8 +1920,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         workflowGraphMarkup = `<div style="margin-top: 16px;">${renderSemanticGraph(graphIr)}</div>`;
       }
 
-      return `<div class="drawer-backdrop" data-dismiss-drawer>
-        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}">
+      return `<div class="drawer-backdrop" data-dismiss-drawer data-status="${escapeHtml(status)}">
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="${escapeHtml(drawerDecision.size)}" data-status="${escapeHtml(status)}">
           <header class="drawer-header">
             <div>
               <p class="eyebrow">${escapeHtml(screen.singular)} details</p>
@@ -1453,11 +1940,12 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
             </div>
             ${workflowGraphMarkup}
           </div>
-          <footer class="drawer-footer">
-            <button type="button" class="button secondary" data-close-drawer>Close</button>
-            ${workflowActions}
-            ${editButton}
-            ${deleteButton}
+          <footer class="drawer-footer drawer-action-footer">
+            <div class="drawer-footer-actions">
+              ${secondaryMarkup}
+              ${primaryMarkup}
+              ${overflowMarkup}
+            </div>
           </footer>
         </aside>
       </div>`;
@@ -1465,8 +1953,8 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
 
     if (purpose === "filter") {
       const q = queryState(screen);
-      return `<div class="drawer-backdrop" data-dismiss-drawer>
-        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="compact">
+      return `<div class="drawer-backdrop" data-dismiss-drawer data-status="${escapeHtml(status)}">
+        <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-drawer-panel data-representation="${escapeHtml(drawerDecision.representation)}" data-size="compact" data-status="${escapeHtml(status)}">
           <header class="drawer-header">
             <div>
               <p class="eyebrow">Filters</p>
@@ -1521,7 +2009,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         ${items.map((it, idx) => {
           if (it.separator) return '<div class="menu-separator" role="separator"></div>';
           return `
-            <button class="menu-item ${it.tone === "destructive" ? "destructive" : ""}" role="menuitem" data-menu-action="${escapeHtml(it.id)}" data-tone="${escapeHtml(it.tone ?? "neutral")}" ${it.disabled ? "disabled" : ""} tabindex="-1" data-index="${idx}">
+            <button type="button" class="menu-item ${it.tone === "destructive" ? "destructive" : ""}" role="menuitem" data-menu-action="${escapeHtml(it.id)}" data-tone="${escapeHtml(it.tone ?? "neutral")}" ${it.disabled ? "disabled" : ""} tabindex="-1" data-index="${idx}">
               ${it.icon ? icon(it.icon, 16) : ""}
               <span>${escapeHtml(it.label)}</span>
             </button>
@@ -1552,15 +2040,151 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     </section></div>`;
   }
 
+  function closeDrawer(force = false) {
+    if (!state.drawer) return;
+    if (state.drawer.status === "closing") return;
+    if (!force && state.drawer.isDirty) {
+      state.confirm = { type: "discard_drawer" };
+      render();
+      root.querySelector("[data-confirm-modal]")?.querySelector("button, input")?.focus();
+      return;
+    }
+
+    const prefersReducedMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion || typeof document === "undefined") {
+      const prev = state.drawer.previousFocusedElement;
+      state.drawer = null;
+      render();
+      if (prev && typeof prev.focus === "function") prev.focus();
+      return;
+    }
+
+    state.drawer.status = "closing";
+    render();
+
+    const drawerEl = root.querySelector("[data-drawer-panel]");
+    let finished = false;
+    const finish = () => {
+      if (!finished) {
+        finished = true;
+        if (state.drawer?.status === "closing") {
+          const prev = state.drawer.previousFocusedElement;
+          state.drawer = null;
+          render();
+          if (prev && typeof prev.focus === "function") prev.focus();
+        }
+      }
+    };
+
+    if (drawerEl && typeof drawerEl.addEventListener === "function") {
+      drawerEl.addEventListener("animationend", finish, { once: true });
+      setTimeout(finish, 260);
+    } else {
+      finish();
+    }
+  }
+
   function renderConfirm() {
     if (!state.confirm) return "";
+    if (state.confirm.type === "discard_drawer") {
+      return `<div class="modal-backdrop" data-dismiss-discard-confirm><section class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" data-confirm-modal><div class="danger-icon">${icon("trash", 22)}</div><h2 id="confirm-title">Discard changes?</h2><p>You have unsaved changes in this record. Are you sure you want to discard them?</p><div class="modal-actions"><button type="button" class="button secondary" data-cancel-discard>Keep editing</button><button type="button" class="button danger" data-confirm-discard>Discard</button></div></section></div>`;
+    }
     const screen = presentationIr.screens.find((s) => s.resource === state.confirm.entityId);
-    const record = runtime ? runtime.records(screen.resource).find((item) => item.id === state.confirm.recordId) : null;
-    const label = record?.[screen.labelField] ?? record?.id;
-    const isArchive = screen.collection.lifecycle === "archive";
+    const record = runtime ? runtime.records(screen?.resource).find((item) => item.id === state.confirm.recordId) : null;
+    const label = record?.[screen?.labelField] ?? record?.id;
+    const isArchive = screen?.collection?.lifecycle === "archive";
     const verb = isArchive ? "Archive" : "Delete";
     const consequence = isArchive ? "It will leave active views but remain stored." : "This action cannot be undone.";
-    return `<div class="modal-backdrop"><section class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title"><div class="danger-icon">${icon("trash", 22)}</div><h2 id="confirm-title">${verb} ${escapeHtml(screen.singular.toLowerCase())}?</h2><p><strong>${escapeHtml(label)}</strong> will be ${isArchive ? "archived" : "permanently removed"}. ${consequence}</p><div class="modal-actions"><button class="button secondary" data-cancel-delete>Cancel</button><button class="button danger" data-confirm-delete>${verb} ${escapeHtml(screen.singular.toLowerCase())}</button></div></section></div>`;
+    return `<div class="modal-backdrop"><section class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" data-confirm-modal><div class="danger-icon">${icon("trash", 22)}</div><h2 id="confirm-title">${verb} ${escapeHtml(screen?.singular?.toLowerCase() ?? "record")}?</h2><p><strong>${escapeHtml(label)}</strong> will be ${isArchive ? "archived" : "permanently removed"}. ${consequence}</p><div class="modal-actions"><button class="button secondary" data-cancel-delete>Cancel</button><button class="button danger" data-confirm-delete>${verb} ${escapeHtml(screen?.singular?.toLowerCase() ?? "record")}</button></div></section></div>`;
+  }
+
+  function formatRelativeTime(isoString, now = new Date()) {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    const diffMs = now.valueOf() - date.valueOf();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return "Just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h ago`;
+    const diffDay = Math.floor(diffHour / 24);
+    return `${diffDay}d ago`;
+  }
+
+  function renderNotificationCenter() {
+    if (!state.notificationCenterOpen) return "";
+    const isMobile = state.containerWidth < 768;
+    const notifications = runtime ? runtime.notifications() : [];
+    const unreadCount = runtime ? runtime.unreadNotificationCount() : 0;
+    const now = runtime?.clock?.() ?? new Date();
+
+    const feedHtml = notifications.length === 0
+      ? `<div class="empty-notifications">
+           <div class="empty-icon">${icon("bell", 28)}</div>
+           <p>No notifications</p>
+         </div>`
+      : `<div class="notification-feed" role="feed" aria-label="Notification list">
+           ${notifications.map((notif) => {
+             const toneIcon = notif.tone === "warning" || notif.tone === "danger" ? "warning" : notif.tone === "success" ? "check" : "bell";
+             return `
+               <article class="notification-card ${notif.read ? "read" : "unread"}" data-notification-card data-notification-id="${escapeHtml(notif.id)}" data-resource="${escapeHtml(notif.action?.resource ?? notif.resource)}" data-record="${escapeHtml(notif.action?.recordId ?? notif.recordId)}" tabindex="0" role="button" aria-label="${escapeHtml(notif.label)}: ${escapeHtml(notif.title)}">
+                 <div class="notification-tone-icon ${escapeHtml(notif.tone)}">${icon(toneIcon, 16)}</div>
+                 <div class="notification-content">
+                   <div class="notification-meta">
+                     <span class="notification-label">${escapeHtml(notif.label)}</span>
+                     <span class="notification-time">${escapeHtml(formatRelativeTime(notif.createdAt, now))}</span>
+                   </div>
+                   <h4 class="notification-title">${escapeHtml(notif.title)}</h4>
+                   ${notif.body ? `<p class="notification-body">${escapeHtml(notif.body)}</p>` : ""}
+                 </div>
+                 <div class="notification-actions">
+                   <button type="button" class="icon-button-sm ${notif.read ? "read-btn" : "unread-btn"}" data-toggle-read="${escapeHtml(notif.id)}" aria-label="${notif.read ? "Mark as unread" : "Mark as read"}" title="${notif.read ? "Mark as unread" : "Mark as read"}">${icon("check", 13)}</button>
+                   <button type="button" class="icon-button-sm dismiss-btn" data-dismiss-notif="${escapeHtml(notif.id)}" aria-label="Dismiss notification" title="Dismiss">${icon("close", 13)}</button>
+                 </div>
+                 ${!notif.read ? `<span class="unread-dot" aria-hidden="true"></span>` : ""}
+               </article>
+             `;
+           }).join("")}
+         </div>`;
+
+    if (isMobile) {
+      return `<div class="modal-backdrop notification-sheet-backdrop" data-dismiss-notifications>
+        <section class="notification-sheet drawer-panel" role="dialog" aria-modal="true" aria-labelledby="notif-sheet-title" data-notification-sheet>
+          <header class="drawer-header notification-center-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 id="notif-sheet-title">Notifications</h2>
+              ${unreadCount > 0 ? `<span class="badge accent">${unreadCount} new</span>` : ""}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${unreadCount > 0 ? `<button type="button" class="text-button" data-mark-all-read>Mark all read</button>` : ""}
+              <button class="icon-button" data-close-notifications aria-label="Close notifications">${icon("close", 18)}</button>
+            </div>
+          </header>
+          <div class="drawer-body notification-center-body">
+            ${feedHtml}
+          </div>
+        </section>
+      </div>`;
+    }
+
+    return `<div class="notification-popover-backdrop" data-dismiss-notifications>
+      <section class="notification-popover panel" role="dialog" aria-modal="true" aria-labelledby="notif-popover-title" data-notification-popover>
+        <header class="notification-center-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h3 id="notif-popover-title">Notifications</h3>
+            ${unreadCount > 0 ? `<span class="badge accent">${unreadCount} new</span>` : ""}
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            ${unreadCount > 0 ? `<button type="button" class="text-button" data-mark-all-read>Mark all read</button>` : ""}
+            <button class="icon-button" data-close-notifications aria-label="Close notifications">${icon("close", 16)}</button>
+          </div>
+        </header>
+        <div class="notification-center-body">
+          ${feedHtml}
+        </div>
+      </section>
+    </div>`;
   }
 
   function render() {
@@ -1618,14 +2242,14 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         ${renderMenu()}
       </div>`;
     } else {
-      // Authenticated Application Shell
       const principal = runtime?.principal;
       const isAuthenticated = Boolean(principal && (principal.id || (principal.roles && principal.roles.length > 0)));
       const currentUser = authAdapter.users?.find((u) => u.id === principal?.id);
       const shellDecision = resolveShellArtifactLayout(state.containerWidth, false);
       const isCompactShell = shellDecision.representation === SHELL_REPRESENTATION.COMPACT;
+      const unreadCount = runtime ? runtime.unreadNotificationCount() : 0;
 
-      root.innerHTML = `<div class="app-shell" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}" data-shell-representation="${escapeHtml(shellDecision.representation)}">
+      root.innerHTML = `<div class="app-shell" data-host-mode="${escapeHtml(hostMode)}" data-archetype="${escapeHtml(visualDesignIr.archetype)}" data-character="${escapeHtml(visualDesignIr.character)}" data-shell-representation="${escapeHtml(shellDecision.representation)}">
         ${!isCompactShell ? `
         <aside class="sidebar">
           <div class="brand"><span class="brand-mark">${icon("spark", 20)}</span><div><strong>${escapeHtml(presentationIr.app.title)}</strong><small>AIR native</small></div></div>
@@ -1636,6 +2260,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
                 <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem;">${escapeHtml(currentUser?.name ?? principal?.id ?? "Authenticated User")}</strong>
                 <small style="color: var(--muted); font-size: 0.75rem;">${escapeHtml(principal?.roles?.join(", ") ?? "user")}</small>
               </div>
+              <button class="icon-button bell-button" data-notification-bell aria-label="Notifications, ${unreadCount} unread" aria-expanded="${Boolean(state.notificationCenterOpen)}" title="Notifications">
+                ${icon("bell", 18)}
+                ${unreadCount > 0 ? `<span class="unread-badge" aria-hidden="true">${unreadCount > 99 ? "99+" : unreadCount}</span>` : ""}
+              </button>
             </div>` : ""}
           <nav aria-label="Primary navigation">${renderNav()}</nav>
           <div class="sidebar-footer">
@@ -1650,14 +2278,20 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         <header class="mobile-header">
           <div class="brand"><span class="brand-mark">${icon("spark", 18)}</span><strong>${escapeHtml(presentationIr.app.title)}</strong></div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            ${isAuthenticated ? `<button class="icon-button logout-button" data-logout aria-label="Sign out" title="Sign out">${icon("close", 18)}</button>` : ""}
+            ${isAuthenticated ? `
+              <button class="icon-button bell-button" data-notification-bell aria-label="Notifications, ${unreadCount} unread" aria-expanded="${Boolean(state.notificationCenterOpen)}" title="Notifications">
+                ${icon("bell", 18)}
+                ${unreadCount > 0 ? `<span class="unread-badge" aria-hidden="true">${unreadCount > 99 ? "99+" : unreadCount}</span>` : ""}
+              </button>
+              <button class="icon-button logout-button" data-logout aria-label="Sign out" title="Sign out">${icon("close", 18)}</button>
+            ` : ""}
             <button class="icon-button" data-theme-toggle aria-label="Toggle theme">${icon(state.theme === "dark" ? "sun" : "moon", 18)}</button>
           </div>
         </header>
         `}
         <main class="content" tabindex="-1">${renderPage()}</main>
         ${isCompactShell ? `<nav class="mobile-nav" aria-label="Primary navigation">${renderNav()}</nav>` : ""}
-      </div><div id="air-toast" class="toast" role="status" aria-live="polite"></div>${renderModal()}${renderConfirm()}${renderDrawer()}${renderMenu()}`;
+      </div><div id="air-toast" class="toast" role="status" aria-live="polite"></div>${renderModal()}${renderConfirm()}${renderDrawer()}${renderMenu()}${renderNotificationCenter()}`;
     }
     bindEvents();
   }
@@ -1744,7 +2378,10 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     });
 
     root.querySelectorAll("[data-detail]").forEach((row) => {
-      const open = () => {
+      const open = (event) => {
+        if (event && isInteractiveRowTarget(event.target) && event.target !== row) {
+          return;
+        }
         const [entityId, recordId] = row.dataset.detail.split(":");
         state.drawer = {
           purpose: "detail",
@@ -1762,8 +2399,9 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       row.addEventListener("click", open);
       row.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
+          if (isInteractiveRowTarget(event.target) && event.target !== row) return;
           event.preventDefault();
-          open();
+          open(event);
         }
       });
     });
@@ -1771,12 +2409,14 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     root.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.addEventListener("click", (event) => {
         const [entityId, recordId] = event.currentTarget.dataset.edit.split(":");
+        const screen = presentationIr.screens.find((s) => s.resource === entityId);
+        const record = runtime ? (runtime.get(entityId, recordId) ?? runtime.records(entityId)?.find((item) => item.id === recordId)) : null;
         state.drawer = {
           purpose: "edit",
           entityId,
           recordId,
           size: DRAWER_SIZE.STANDARD,
-          values: {},
+          values: hydrateEditorValues(screen, record),
           errors: {},
           isDirty: false,
           previousFocusedElement: document.activeElement
@@ -1789,10 +2429,13 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     root.querySelectorAll("[data-drawer-edit]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const [entityId, recordId] = btn.dataset.drawerEdit.split(":");
+        const screen = presentationIr.screens.find((s) => s.resource === entityId);
+        const record = runtime ? (runtime.get(entityId, recordId) ?? runtime.records(entityId)?.find((item) => item.id === recordId)) : null;
         if (state.drawer) {
           state.drawer.purpose = "edit";
           state.drawer.entityId = entityId;
           state.drawer.recordId = recordId;
+          state.drawer.values = hydrateEditorValues(screen, record);
           state.drawer.errors = {};
           state.drawer.isDirty = false;
           render();
@@ -1803,30 +2446,14 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
 
     root.querySelectorAll("[data-close-drawer]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        if (state.drawer?.isDirty) {
-          if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
-            return;
-          }
-        }
-        const prev = state.drawer?.previousFocusedElement;
-        state.drawer = null;
-        render();
-        if (prev && typeof prev.focus === "function") prev.focus();
+        closeDrawer(false);
       });
     });
 
     root.querySelectorAll("[data-dismiss-drawer]").forEach((backdrop) => {
       backdrop.addEventListener("click", (event) => {
         if (event.target === event.currentTarget) {
-          if (state.drawer?.isDirty) {
-            if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
-              return;
-            }
-          }
-          const prev = state.drawer?.previousFocusedElement;
-          state.drawer = null;
-          render();
-          if (prev && typeof prev.focus === "function") prev.focus();
+          closeDrawer(false);
         }
       });
     });
@@ -1865,10 +2492,7 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
             notify(`${screen.singular} created`);
           }
         }
-        const prev = state.drawer?.previousFocusedElement;
-        state.drawer = null;
-        render();
-        if (prev && typeof prev.focus === "function") prev.focus();
+        closeDrawer(true);
       } catch (error) {
         if (state.drawer) {
           state.drawer.errors = error.fieldErrors ?? { _form: error.message };
@@ -1878,17 +2502,181 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       }
     });
 
+    function executeMenuAction(actionId) {
+      const parts = actionId.split(":");
+      const verb = parts[0];
+
+      if (verb === "view") {
+        const [, entityId, recordId] = parts;
+        state.drawer = {
+          purpose: "detail",
+          entityId,
+          recordId,
+          size: DRAWER_SIZE.STANDARD,
+          values: {},
+          errors: {},
+          isDirty: false,
+          previousFocusedElement: document.activeElement
+        };
+        render();
+      } else if (verb === "edit") {
+        const [, entityId, recordId] = parts;
+        const screen = presentationIr.screens.find((s) => s.resource === entityId);
+        const record = runtime ? (runtime.get(entityId, recordId) ?? runtime.records(entityId)?.find((item) => item.id === recordId)) : null;
+        state.drawer = {
+          purpose: "edit",
+          entityId,
+          recordId,
+          size: DRAWER_SIZE.STANDARD,
+          values: hydrateEditorValues(screen, record),
+          errors: {},
+          isDirty: false,
+          previousFocusedElement: document.activeElement
+        };
+        render();
+      } else if (verb === "delete") {
+        const [, entityId, recordId] = parts;
+        state.confirm = { entityId, recordId };
+        render();
+      } else if (verb === "transition") {
+        const [, entityId, recordId, transAction, commentReq] = parts;
+        let comment = "";
+        if (commentReq !== "none") {
+          const response = prompt(commentReq === "required" ? "Comment required" : "Optional comment");
+          if (response == null) return;
+          comment = response;
+        }
+        try {
+          if (runtime) runtime.transition(entityId, recordId, transAction, { comment });
+          render();
+          notify("Workflow updated");
+        } catch (error) {
+          notify(error.message, "danger");
+        }
+      }
+    }
+
+    let activeMenuCloseHandler = null;
+
+    function unmountMenu() {
+      if (activeMenuCloseHandler) {
+        window.removeEventListener("scroll", activeMenuCloseHandler, true);
+        window.removeEventListener("resize", activeMenuCloseHandler, true);
+        activeMenuCloseHandler = null;
+      }
+      const existing = root?.querySelector?.(".menu-backdrop");
+      if (existing) existing.remove();
+      if (state.openMenu?.triggerEl) {
+        state.openMenu.triggerEl.setAttribute("aria-expanded", "false");
+      }
+      state.openMenu = null;
+    }
+
+    function mountMenu(menuData) {
+      unmountMenu();
+      state.openMenu = menuData;
+      if (menuData.triggerEl) {
+        menuData.triggerEl.setAttribute("aria-expanded", "true");
+      }
+
+      const { items, position, isMobileSheet } = menuData;
+      const menuDecision = resolveMenuArtifactLayout(state.containerWidth);
+      const isSheet = isMobileSheet || menuDecision.representation === MENU_REPRESENTATION.COMPACT_SHEET;
+
+      let style = "";
+      if (!isSheet && position) {
+        style = `top: ${position.top}px; left: ${position.left}px;`;
+      }
+
+      const html = `<div class="menu-backdrop" data-dismiss-menu>
+        <div class="menu-dropdown" role="menu" data-menu-panel data-representation="${isSheet ? "compact_sheet" : "dropdown"}" style="${style}" tabindex="-1">
+          ${items.map((it, idx) => {
+            if (it.separator) return '<div class="menu-separator" role="separator"></div>';
+            return `
+              <button type="button" class="menu-item ${it.tone === "destructive" ? "destructive" : ""}" role="menuitem" data-menu-action="${escapeHtml(it.id)}" data-tone="${escapeHtml(it.tone ?? "neutral")}" ${it.disabled ? "disabled" : ""} tabindex="-1" data-index="${idx}">
+                ${it.icon ? icon(it.icon, 16) : ""}
+                <span>${escapeHtml(it.label)}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </div>`;
+
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      const backdrop = wrap.firstElementChild;
+      if (!backdrop || !root) return;
+
+      root.appendChild(backdrop);
+
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) {
+          e.stopPropagation();
+          unmountMenu();
+        }
+      });
+
+      backdrop.querySelectorAll("[data-menu-action]").forEach((itemBtn) => {
+        itemBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const actionId = itemBtn.dataset.menuAction;
+          unmountMenu();
+          executeMenuAction(actionId);
+        });
+      });
+
+      const menuPanel = backdrop.querySelector("[data-menu-panel]");
+      const menuItems = Array.from(menuPanel?.querySelectorAll('[role="menuitem"]:not([disabled])') || []);
+      if (menuItems.length > 0) {
+        menuItems[0].focus();
+      }
+
+      menuPanel?.addEventListener("keydown", (e) => {
+        const active = document.activeElement;
+        const curIdx = menuItems.indexOf(active);
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const next = (curIdx + 1) % menuItems.length;
+          menuItems[next]?.focus();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = (curIdx - 1 + menuItems.length) % menuItems.length;
+          menuItems[prev]?.focus();
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          menuItems[0]?.focus();
+        } else if (e.key === "End") {
+          e.preventDefault();
+          menuItems[menuItems.length - 1]?.focus();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          const trigger = menuData.triggerEl;
+          unmountMenu();
+          trigger?.focus();
+        }
+      });
+
+      activeMenuCloseHandler = (e) => {
+        if (e.target && typeof e.target.closest === "function" && e.target.closest(".menu-dropdown")) return;
+        unmountMenu();
+      };
+      window.addEventListener("scroll", activeMenuCloseHandler, true);
+      window.addEventListener("resize", activeMenuCloseHandler, true);
+    }
+
     // Row Action Menu Triggers
     root.querySelectorAll("[data-row-action-menu]").forEach((btn) => {
       btn.addEventListener("click", (event) => {
+        event.preventDefault();
         event.stopPropagation();
         const [entityId, recordId] = btn.dataset.rowActionMenu.split(":");
         const screen = presentationIr.screens.find((s) => s.resource === entityId);
         const record = runtime ? runtime.get(entityId, recordId) : null;
 
         if (state.openMenu && state.openMenu.id === `row-menu-${entityId}-${recordId}`) {
-          state.openMenu = null;
-          render();
+          unmountMenu();
           return;
         }
 
@@ -1922,91 +2710,121 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         const rect = btn.getBoundingClientRect();
         const isMobile = state.containerWidth < 640;
 
-        let top = Math.round(rect.bottom + 4);
-        let left = Math.round(rect.right - 180);
-        if (left < 10) left = 10;
-        if (typeof window !== "undefined" && window.innerWidth) {
-          if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
-          if (top + 220 > window.innerHeight) top = Math.max(10, rect.top - 200);
+        let top;
+        let left;
+        if (isEmbedded && root) {
+          const rootRect = root.getBoundingClientRect();
+          const scale = rootRect.width > 0 && root.offsetWidth > 0 ? (rootRect.width / root.offsetWidth) : 1;
+          const unscaledTop = (rect.bottom - rootRect.top) / scale + (root.scrollTop || 0) + 4;
+          const unscaledLeft = (rect.right - rootRect.left) / scale + (root.scrollLeft || 0) - 180;
+          top = Math.round(unscaledTop);
+          left = Math.round(unscaledLeft);
+          const rootLogicalW = root.clientWidth || root.offsetWidth || 1200;
+          const rootLogicalH = root.clientHeight || root.offsetHeight || 720;
+          if (left < 10) left = 10;
+          if (left + 190 > rootLogicalW) left = Math.max(10, rootLogicalW - 190);
+          if (top + 200 > rootLogicalH) {
+            const aboveTop = (rect.top - rootRect.top) / scale + (root.scrollTop || 0) - 190;
+            top = Math.max(10, Math.round(aboveTop));
+          }
+        } else {
+          top = Math.round(rect.bottom + 4);
+          left = Math.round(rect.right - 180);
+          if (left < 10) left = 10;
+          if (typeof window !== "undefined" && window.innerWidth) {
+            if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+            if (top + 220 > window.innerHeight) top = Math.max(10, rect.top - 200);
+          }
         }
 
-        state.openMenu = {
+        mountMenu({
           id: `row-menu-${entityId}-${recordId}`,
           triggerEl: btn,
           items,
           isMobileSheet: isMobile,
           position: { top, left }
-        };
-        render();
-
-        const menuPanel = root.querySelector("[data-menu-panel]");
-        menuPanel?.querySelector('[role="menuitem"]')?.focus();
+        });
       });
     });
 
-    root.querySelectorAll("[data-dismiss-menu]").forEach((backdrop) => {
-      backdrop.addEventListener("click", (event) => {
-        if (event.target === event.currentTarget) {
-          state.openMenu = null;
-          render();
-        }
-      });
-    });
-
-    root.querySelectorAll("[data-menu-action]").forEach((itemBtn) => {
-      itemBtn.addEventListener("click", (event) => {
+    root.querySelectorAll("[data-drawer-overflow-menu]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
         event.stopPropagation();
-        const actionId = itemBtn.dataset.menuAction;
-        state.openMenu = null;
-        const parts = actionId.split(":");
-        const verb = parts[0];
+        if (!state.drawer || state.drawer.purpose !== "detail") return;
+        const { entityId, recordId } = state.drawer;
+        const record = runtime ? (runtime.get(entityId, recordId) ?? runtime.records(entityId)?.find((item) => item.id === recordId)) : null;
+        if (!record) return;
 
-        if (verb === "view") {
-          const [, entityId, recordId] = parts;
-          state.drawer = {
-            purpose: "detail",
-            entityId,
-            recordId,
-            size: DRAWER_SIZE.STANDARD,
-            values: {},
-            errors: {},
-            isDirty: false,
-            previousFocusedElement: document.activeElement
-          };
-          render();
-        } else if (verb === "edit") {
-          const [, entityId, recordId] = parts;
-          state.drawer = {
-            purpose: "edit",
-            entityId,
-            recordId,
-            size: DRAWER_SIZE.STANDARD,
-            values: {},
-            errors: {},
-            isDirty: false,
-            previousFocusedElement: document.activeElement
-          };
-          render();
-        } else if (verb === "delete") {
-          const [, entityId, recordId] = parts;
-          state.confirm = { entityId, recordId };
-          render();
-        } else if (verb === "transition") {
-          const [, entityId, recordId, transAction, commentReq] = parts;
-          let comment = "";
-          if (commentReq !== "none") {
-            const response = prompt(commentReq === "required" ? "Comment required" : "Optional comment");
-            if (response == null) return;
-            comment = response;
-          }
-          try {
-            if (runtime) runtime.transition(entityId, recordId, transAction, { comment });
-            render();
-            notify("Workflow updated");
-          } catch (error) {
-            notify(error.message, "danger");
+        if (state.openMenu && state.openMenu.id === `drawer-overflow-${entityId}-${recordId}`) {
+          unmountMenu();
+          return;
+        }
+
+        const overflowActions = state.drawer.overflowActions ?? [];
+        const items = [];
+        for (const act of overflowActions) {
+          if (act.separator) {
+            items.push({ separator: true });
+          } else if (act.type === "transition") {
+            items.push({
+              id: `transition:${entityId}:${recordId}:${act.action}:${act.comment ?? "none"}`,
+              label: act.label,
+              icon: act.icon ?? "spark",
+              tone: act.tone ?? "neutral"
+            });
+          } else if (act.type === "delete") {
+            items.push({
+              id: `delete:${entityId}:${recordId}`,
+              label: act.label,
+              icon: "trash",
+              tone: "destructive"
+            });
+          } else if (act.type === "edit") {
+            items.push({
+              id: `edit:${entityId}:${recordId}`,
+              label: "Edit",
+              icon: "edit"
+            });
           }
         }
+
+        const rect = btn.getBoundingClientRect();
+        const isMobile = state.containerWidth < 640;
+        let top;
+        let left;
+        if (isEmbedded && root) {
+          const rootRect = root.getBoundingClientRect();
+          const scale = rootRect.width > 0 && root.offsetWidth > 0 ? (rootRect.width / root.offsetWidth) : 1;
+          const unscaledTop = (rect.bottom - rootRect.top) / scale + (root.scrollTop || 0) + 4;
+          const unscaledLeft = (rect.right - rootRect.left) / scale + (root.scrollLeft || 0) - 180;
+          top = Math.round(unscaledTop);
+          left = Math.round(unscaledLeft);
+          const rootLogicalW = root.clientWidth || root.offsetWidth || 1200;
+          const rootLogicalH = root.clientHeight || root.offsetHeight || 720;
+          if (left < 10) left = 10;
+          if (left + 190 > rootLogicalW) left = Math.max(10, rootLogicalW - 190);
+          if (top + 200 > rootLogicalH) {
+            const aboveTop = (rect.top - rootRect.top) / scale + (root.scrollTop || 0) - 190;
+            top = Math.max(10, Math.round(aboveTop));
+          }
+        } else {
+          top = Math.round(rect.bottom + 4);
+          left = Math.round(rect.right - 180);
+          if (left < 10) left = 10;
+          if (typeof window !== "undefined" && window.innerWidth) {
+            if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+            if (top + 220 > window.innerHeight) top = Math.max(10, rect.top - 200);
+          }
+        }
+
+        mountMenu({
+          id: `drawer-overflow-${entityId}-${recordId}`,
+          triggerEl: btn,
+          items,
+          isMobileSheet: isMobile,
+          position: { top, left }
+        });
       });
     });
 
@@ -2107,6 +2925,27 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
       }
     });
 
+    root.querySelector("[data-cancel-discard]")?.addEventListener("click", () => {
+      state.confirm = null;
+      render();
+      root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+    });
+
+    root.querySelector("[data-confirm-discard]")?.addEventListener("click", () => {
+      state.confirm = null;
+      closeDrawer(true);
+    });
+
+    root.querySelectorAll("[data-dismiss-discard-confirm]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) {
+          state.confirm = null;
+          render();
+          root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+        }
+      });
+    });
+
     root.querySelector("[data-dismiss-modal]")?.addEventListener("click", (event) => {
       if (event.target === event.currentTarget) {
         state.modal = null;
@@ -2122,21 +2961,28 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     // Focus trap and keyboard listeners
     root.onkeydown = (event) => {
       if (event.key === "Escape") {
+        if (state.notificationCenterOpen) {
+          state.notificationCenterOpen = false;
+          render();
+          root.querySelector("[data-notification-bell]")?.focus();
+          return;
+        }
         if (state.openMenu) {
           state.openMenu = null;
           render();
           return;
         }
-        if (state.drawer) {
-          if (state.drawer.isDirty) {
-            if (typeof confirm === "function" && !confirm("You have unsaved changes. Discard them?")) {
-              return;
-            }
-          }
-          const prev = state.drawer.previousFocusedElement;
-          state.drawer = null;
+        if (state.confirm) {
+          const isDiscard = state.confirm.type === "discard_drawer";
+          state.confirm = null;
           render();
-          if (prev && typeof prev.focus === "function") prev.focus();
+          if (isDiscard) {
+            root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+          }
+          return;
+        }
+        if (state.drawer) {
+          closeDrawer(false);
           return;
         }
         if (state.modal) {
@@ -2190,6 +3036,75 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         }
       }
     };
+
+    // Schedule Navigation & View Controls
+    root.querySelectorAll("[data-screen-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.screenView;
+        const scr = currentScreen();
+        if (scr) {
+          state.screenViewMode.set(scr.id, mode);
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-schedule-nav]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dir = btn.dataset.scheduleNav;
+        const viewMode = state.scheduleState.viewMode;
+        if (dir === "today") {
+          state.scheduleState.currentDate = getZonedDateParts(options.clock ?? options.now ?? new Date(), state.scheduleState.timezone).dateString;
+        } else if (dir === "prev") {
+          state.scheduleState.currentDate = addDaysToDateString(state.scheduleState.currentDate, viewMode === "week" ? -7 : -1);
+        } else if (dir === "next") {
+          state.scheduleState.currentDate = addDaysToDateString(state.scheduleState.currentDate, viewMode === "week" ? 7 : 1);
+        }
+        render();
+      });
+    });
+
+    root.querySelectorAll("[data-schedule-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.scheduleState.viewMode = btn.dataset.scheduleView;
+        render();
+      });
+    });
+
+    root.querySelector("[data-schedule-filter-group]")?.addEventListener("change", (event) => {
+      state.scheduleState.selectedGroup = event.target.value;
+      render();
+    });
+
+    root.querySelector("[data-schedule-linear-toggle]")?.addEventListener("click", () => {
+      state.scheduleState.linearView = !state.scheduleState.linearView;
+      render();
+    });
+
+    root.querySelectorAll("[data-create-slot]").forEach((slot) => {
+      slot.addEventListener("click", () => {
+        const [groupId, slotStart, slotEnd] = slot.dataset.createSlot.split(":");
+        const scr = currentScreen();
+        const groupField = scr.schedule?.groupField ?? "resource";
+        const startField = scr.schedule?.startField ?? "start_at";
+        const endField = scr.schedule?.endField ?? "end_at";
+        state.drawer = {
+          purpose: "create",
+          entityId: scr.resource,
+          size: DRAWER_SIZE.STANDARD,
+          values: {
+            [groupField]: groupId,
+            [startField]: slotStart,
+            [endField]: slotEnd
+          },
+          errors: {},
+          isDirty: true,
+          previousFocusedElement: document.activeElement
+        };
+        render();
+        root.querySelector("[data-drawer-panel]")?.querySelector("input, select, textarea, button")?.focus();
+      });
+    });
 
     // 1. Auth Login Form Submission
     root.querySelector("#auth-login-form")?.addEventListener("submit", async (event) => {
@@ -2505,6 +3420,97 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
         spotlight.style.setProperty("--pointer-y", `${y}px`);
       });
     });
+
+    // Notification Center Event Handlers
+    root.querySelectorAll("[data-notification-bell]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.notificationCenterOpen = !state.notificationCenterOpen;
+        render();
+        if (state.notificationCenterOpen) {
+          root.querySelector("[data-notification-sheet], [data-notification-popover]")?.focus();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-close-notifications]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.notificationCenterOpen = false;
+        render();
+      });
+    });
+
+    root.querySelectorAll("[data-dismiss-notifications]").forEach((backdrop) => {
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) {
+          state.notificationCenterOpen = false;
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-mark-all-read]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (runtime) {
+          runtime.markAllNotificationsAsRead();
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-toggle-read]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.toggleRead;
+        if (runtime && id) {
+          runtime.markNotificationAsRead(id);
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-dismiss-notif]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.dismissNotif;
+        if (runtime && id) {
+          runtime.dismissNotification(id);
+          render();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-notification-card]").forEach((card) => {
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        const id = card.dataset.notificationId;
+        const resource = card.dataset.resource;
+        const recordId = card.dataset.record;
+        if (runtime && id) {
+          runtime.markNotificationAsRead(id);
+        }
+        state.notificationCenterOpen = false;
+        if (resource && recordId) {
+          state.drawer = {
+            purpose: "detail",
+            entityId: resource,
+            recordId: recordId,
+            size: DRAWER_SIZE.STANDARD,
+            status: "open",
+            previousFocusedElement: card
+          };
+        }
+        render();
+      });
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          card.click();
+        }
+      });
+    });
   }
 
   // Container capability detection & real-time recomposition via ResizeObserver
@@ -2536,6 +3542,13 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     render,
     authAdapter,
     state,
+    runtime,
+    model: options.model ?? null,
+    presentationIr,
+    records(resourceId) { return runtime?.records(resourceId) ?? []; },
+    get(resourceId, id) { return runtime?.get(resourceId, id) ?? null; },
+    update(resourceId, id, values) { return runtime?.update(resourceId, id, values); },
+    create(resourceId, values) { return runtime?.create(resourceId, values); },
     setContainerWidth(width) {
       state.containerWidth = width;
       render();
@@ -2543,12 +3556,22 @@ export function renderPresentation(root, initialPresentationIr, runtime, options
     destroy() {
       if (unsubscribe) unsubscribe();
       if (resizeObserver) resizeObserver.disconnect();
+      if (state.toastTimer) clearTimeout(state.toastTimer);
+    },
+    dispose() {
+      if (unsubscribe) unsubscribe();
+      if (resizeObserver) resizeObserver.disconnect();
+      if (state.toastTimer) clearTimeout(state.toastTimer);
+      if (root) {
+        root.innerHTML = "";
+        root.classList.remove("app-host-embedded");
+      }
     }
   };
 }
 
 /**
- * Legacy wrapper: mounts an AIR app by compiling AIR -> Semantic Model -> Presentation Compiler -> Presentation IR -> Web Renderer.
+ * Mounts an AIR app by compiling AIR -> Semantic Model -> Presentation Compiler -> Presentation IR -> Web Renderer.
  */
 export function mountAirApp(root, source, options = {}) {
   let model;
@@ -2557,11 +3580,19 @@ export function mountAirApp(root, source, options = {}) {
   try {
     model = parseAir(source);
     const seedData = parseSeedData(options.seedSource ?? {}, model);
-    runtime = new AppRuntime(model, { storage: options.storage, seedData, principal: options.principal });
+    runtime = new AppRuntime(model, {
+      storage: options.storage,
+      seedData,
+      principal: options.principal,
+      namespace: options.namespace
+    });
     presentationIr = compilePresentation(model, { principal: options.principal, runtime });
     return renderPresentation(root, presentationIr, runtime, { ...options, model });
   } catch (error) {
-    renderFatalError(root, error);
+    renderFatalError(root, error, {
+      onRetry: options.onRetry ?? (() => mountAirApp(root, source, options)),
+      ...options
+    });
     return null;
   }
 }

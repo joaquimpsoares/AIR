@@ -19,6 +19,14 @@ export const EXPERIENCE_REGISTRY = Object.freeze({
     provides: ["collection", "detail", "editor", "search", "filters", "sorting", "pagination", "actions"],
     configuration: ["create", "edit", "delete", "lifecycle", "page_size"]
   },
+  "schedule.management": {
+    id: "schedule.management",
+    version: 1,
+    purpose: "Infers responsive time grid and chronological agenda scheduling for temporal resources.",
+    requires: ["resource", "interval", "ref"],
+    provides: ["schedule_grid", "agenda_list", "date_navigation", "slot_booking", "blackout_display", "filters"],
+    configuration: ["start_hour", "end_hour", "view_mode", "timezone"]
+  },
   "workflow.inbox": {
     id: "workflow.inbox",
     version: 1,
@@ -936,12 +944,38 @@ export function compilePresentation(model, options = {}) {
     const filterableFields = fields.filter(f => ["enum", "ref", "bool"].includes(f.type)).map(f => f.id);
     const sortChoices = [resource.labelField ?? fields[0]?.id];
 
+    // Check if resource has temporal interval fields & group relations to attach schedule capability
+    const intervalField = (resource.fields ?? []).find(f => f.type === "interval");
+    const startField = intervalField?.start ?? (resource.fields ?? []).find(f => f.id === "start_at" || f.id === "start" || f.type === "date" || f.type === "datetime")?.id;
+    const endField = intervalField?.end ?? (resource.fields ?? []).find(f => f.id === "end_at" || f.id === "end")?.id;
+    const groupRefField = (resource.fields ?? []).find(f => f.type === "ref");
+
+    let scheduleSpec = null;
+    if (startField && endField && groupRefField) {
+      const allResources = model.entities ? [...model.entities.values()] : (model.resources ?? []);
+      const blackoutRes = allResources.find(r => r.id === "blackouts" || r.id.includes("blackout") || r.id.includes("maintenance"))?.id;
+      scheduleSpec = {
+        resource: resource.id,
+        intervalField: intervalField?.id ?? null,
+        startField,
+        endField,
+        groupResource: groupRefField.ref,
+        groupField: groupRefField.id,
+        groupLabelField: allResources.find(r => r.id === groupRefField.ref)?.labelField ?? "name",
+        titleField: resource.labelField ?? "title",
+        statusField: (resource.fields ?? []).find(f => f.id === "status" || f.id === "state")?.id ?? "status",
+        blackoutResource: blackoutRes ?? null,
+        timezone: model.app?.timezone ?? "UTC"
+      };
+    }
+
     // Standard resource screen with collection + editor + detail contracts
     screens.push({
       id: resource.id,
       type: "resource_management",
       resource: resource.id,
       experience: "resource.management",
+      schedule: scheduleSpec,
       title: resource.plural ?? titleCase(resource.id),
       singular: resource.singular ?? titleCase(resource.id),
       icon: resource.icon ?? "collection",

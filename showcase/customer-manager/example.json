@@ -1,0 +1,26 @@
+{
+  "id": "customer-manager",
+  "title": "Customer Manager",
+  "tagline": "30-second introduction to AIR resources, validation, and CRUD UI",
+  "description": "A complete CRM customer directory with full-text search, status filtering, unique email constraint enforcement, responsive record cards, and edit drawers.",
+  "difficulty": "Beginner",
+  "category": "Resource Management",
+  "airEntry": "app.air",
+  "seedEntry": "seed.json",
+  "capabilitiesDemonstrated": [
+    "resource_declaration",
+    "field_validation",
+    "unique_constraints",
+    "enum_status",
+    "collection_search_and_filter",
+    "drawer_action_and_edit",
+    "responsive_table_to_cards"
+  ],
+  "conventionalReference": "benchmarks/customer-manager/conventional",
+  "conventionalStack": "React 19 + TypeScript + Tailwind CSS + Zod + Zustand",
+  "benchmarkTasks": [
+    "MOD1: Add Suspended status enum value",
+    "MOD2: Add account_manager relation field and filter",
+    "MOD3: Make email field optional"
+  ]
+}

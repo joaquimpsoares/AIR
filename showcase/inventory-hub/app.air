@@ -1,0 +1,69 @@
+air version=2
+app inventory_hub title="Inventory Hub" subtitle="Warehouse stock tracking, order fulfillment, and low-stock edge alerts" initial=overview timezone="UTC"
+theme mode=dark accent=emerald
+capability storage.local
+
+resource products label=name
+field products.sku text required unique
+field products.name text required min=2
+field products.category enum values=Electronics,Hardware,Apparel,Supplies required default=Supplies
+field products.unit_price money currency=USD required default=0
+field products.status enum values=Active,Draft,Discontinued required default=Active
+manage products lifecycle=archive
+access products view=role:admin|role:operator edit=role:admin|role:operator
+
+resource warehouses label=name
+field warehouses.code text required unique
+field warehouses.name text required min=2
+field warehouses.region text required default="North America"
+field warehouses.status enum values=Active,Inactive required default=Active
+manage warehouses lifecycle=archive
+access warehouses view=role:admin|role:operator edit=role:admin|role:operator
+
+resource inventory_balances label=product
+field inventory_balances.product ref=products required
+field inventory_balances.warehouse ref=warehouses required
+field inventory_balances.quantity_on_hand integer required default=0
+field inventory_balances.quantity_reserved integer required default=0
+field inventory_balances.reorder_level integer required default=5
+field inventory_balances.status enum values=InStock,LowStock,OutOfStock required default=InStock
+manage inventory_balances lifecycle=archive
+access inventory_balances view=role:admin|role:operator edit=role:admin|role:operator
+
+highlight inventory_balances.low_stock when="quantity_on_hand<=reorder_level&quantity_on_hand>0" tone=warning
+highlight inventory_balances.out_of_stock when="quantity_on_hand<=0" tone=danger
+
+notify inventory_balances.low_stock when="quantity_on_hand<=reorder_level&quantity_on_hand>0" tone=warning label="Low Stock Alert" title="Low Stock Warning" body="Stock for item has dropped to {quantity_on_hand}" audience=role:operator
+notify inventory_balances.out_of_stock when="quantity_on_hand<=0" tone=danger label="Out of Stock" title="Stock Depleted" body="Item is out of stock ({quantity_on_hand} remaining)" audience=role:operator
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.status enum values=Active,Suspended required default=Active
+manage customers lifecycle=archive
+access customers view=role:admin|role:operator edit=role:admin|role:operator
+
+resource orders label=order_number
+field orders.order_number text required unique
+field orders.customer ref=customers required
+field orders.status enum values=Draft,Submitted,Allocated,Fulfilled,Cancelled required default=Draft
+field orders.subtotal money currency=USD required default=0
+field orders.discount money currency=USD required default=0
+field orders.tax money currency=USD required default=0
+field orders.total money currency=USD computed="subtotal - discount + tax"
+field orders.created_at date required default=today
+field orders.updated date required default=today
+manage orders lifecycle=archive
+access orders view=role:admin|role:operator edit=role:admin|role:operator
+
+process orders state=status initial=Draft terminal=Fulfilled,Cancelled history touch=updated
+transition orders.submit from=Draft to=Submitted action=submit by=role:operator event=submitted
+transition orders.allocate from=Submitted to=Allocated action=allocate by=role:operator event=allocated
+transition orders.fulfill from=Allocated to=Fulfilled action=fulfill by=role:operator event=fulfilled
+transition orders.cancel from=Draft,Submitted,Allocated to=Cancelled action=cancel by=role:operator comment=optional event=cancelled
+
+highlight orders.fulfilled when="status==Fulfilled" tone=positive
+notify orders.new_order on=created tone=info label="New Order" title="New Order Created" body="Order {order_number} has been placed" audience=role:admin|role:operator
+
+overview
+insight orders.total_revenue op=sum field=total label="Total Order Value"

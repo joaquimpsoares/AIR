@@ -1,0 +1,61 @@
+air version=2
+app reservation_hub title="Reservation Hub" subtitle="Resource scheduling, interval conflict prevention, and dynamic rates" initial=overview timezone="UTC"
+theme mode=dark accent=violet
+capability storage.local
+
+resource locations label=name
+field locations.name text required min=2
+field locations.timezone text required default="UTC"
+field locations.status enum values=Active,Inactive required default=Active
+manage locations lifecycle=archive
+access locations view=role:admin|role:operator edit=role:admin|role:operator
+
+resource resources label=name
+field resources.name text required min=2
+field resources.location ref=locations required
+field resources.type enum values=MeetingRoom,Desk,Studio,TrainingHall required default=MeetingRoom
+field resources.capacity number required default=4
+field resources.status enum values=Available,Maintenance,Retired required default=Available
+field resources.hourly_rate rate currency=USD unit=h required default=50
+manage resources lifecycle=archive
+access resources view=role:admin|role:operator edit=role:admin|role:operator
+
+resource customers label=name
+field customers.name text required min=2
+field customers.email email required unique
+field customers.status enum values=Active,Suspended required default=Active
+manage customers lifecycle=archive
+access customers view=role:admin|role:operator edit=role:admin|role:operator
+
+resource reservations label=title
+field reservations.title text required min=2
+field reservations.customer ref=customers required
+field reservations.resource ref=resources required
+field reservations.start_at date required default=today
+field reservations.end_at date required default=today
+field reservations.booking_period interval start=start_at end=end_at
+field reservations.attendees number required default=1
+field reservations.status enum values=Requested,Confirmed,CheckedIn,Completed,Cancelled,NoShow required default=Requested
+field reservations.amount money currency=USD required default=0
+field reservations.quote money currency=USD computed="booking_period.duration * resource.hourly_rate"
+field reservations.created_at date required default=today
+field reservations.updated date required default=today
+
+manage reservations lifecycle=archive
+access reservations view=role:admin|role:operator edit=role:admin|role:operator
+
+invariant reservations.no_overlap none=reservations scope=resource overlaps=booking_period where="status!=Cancelled" deny="Resource is already booked during this period"
+invariant reservations.capacity when="attendees>resource.capacity" deny="Attendees cannot exceed resource capacity"
+
+process reservations state=status initial=Requested terminal=Completed,Cancelled,NoShow history touch=updated
+transition reservations.confirm from=Requested to=Confirmed action=confirm by=role:operator event=confirmed
+transition reservations.check_in from=Confirmed to=CheckedIn action=check_in by=role:operator event=checked_in
+transition reservations.complete from=CheckedIn to=Completed action=complete by=role:operator event=completed
+transition reservations.cancel from=Requested,Confirmed to=Cancelled action=cancel by=role:operator comment=optional event=cancelled
+transition reservations.mark_no_show from=Confirmed to=NoShow action=mark_no_show by=role:operator event=no_show
+
+highlight reservations.confirmed when="status==Confirmed" tone=positive
+highlight reservations.cancelled when="status==Cancelled" tone=neutral
+
+overview
+insight reservations.total_quote op=sum field=quote label="Total Quote Value"

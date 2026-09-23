@@ -42,6 +42,19 @@ function createCliEngine() {
 }
 
 async function main() {
+  if ((command === "check" || command === "validate") && args.length === 1) {
+    try {
+      const source = await readFile(args[0], "utf8");
+      const model = parseAir(source);
+      const entityCount = model.entities ? (model.entities.size ?? Object.keys(model.entities).length) : 0;
+      process.stdout.write(`✓ Valid AIR application: ${args[0]} (${entityCount} resource${entityCount === 1 ? "" : "s"})\n`);
+      return;
+    } catch (err) {
+      process.stderr.write(`✗ Syntax/Validation Error in ${args[0]}: ${err.message}\n`);
+      process.exitCode = 1;
+      return;
+    }
+  }
   if (command === "status") {
     const engine = createCliEngine();
     const snapshot = engine.getOperatorSnapshot();

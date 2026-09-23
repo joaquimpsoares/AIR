@@ -1,0 +1,21 @@
+{
+  "task": "MOD1: Add Rejected state and reject transition action",
+  "description": "Introduce a terminal Rejected state, reject transition action with separation-of-duty guard and mandatory rejection reason comment.",
+  "air": {
+    "files": ["showcase/approval-workflow/app.air"],
+    "contextSnippet": "field expenses.status enum values=Draft,Submitted,Approved required default=Draft\ntransition expenses.approve from=Submitted to=Approved action=approve by=role:manager separate=submitter event=approved",
+    "patch": "field expenses.status enum values=Draft,Submitted,Approved,Rejected required default=Draft\ntransition expenses.reject from=Submitted to=Rejected action=reject by=role:manager separate=submitter comment=required event=rejected\nhighlight expenses.rejected when=\"status==Rejected\" tone=danger",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "files": [
+      "benchmarks/approval-workflow/conventional/src/types/expense.ts",
+      "benchmarks/approval-workflow/conventional/src/state/workflowEngine.ts",
+      "benchmarks/approval-workflow/conventional/src/components/ExpenseTable.tsx",
+      "benchmarks/approval-workflow/conventional/src/components/ExpenseWorkflowApp.tsx"
+    ],
+    "contextSnippet": "export type ExpenseStatus = 'Draft' | 'Submitted' | 'Approved'; ... public approve(...) { ... } ... <ExpenseTable />",
+    "patch": "export type ExpenseStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected';\npublic reject(expenseId: string, actor: User, comment: string): TransitionResult { ... }\n// update rejection modal, validation, and table buttons",
+    "filesTouched": 4
+  }
+}

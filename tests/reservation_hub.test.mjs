@@ -124,8 +124,8 @@ test("Reservation Hub Comprehensive Benchmark Suite", async (t) => {
       title: "Ad-hoc Sync",
       customer: "cust_initech",
       resource: "res_boardroom",
-      start_at: "2026-09-23",
-      end_at: "2026-09-23",
+      start_at: "2026-10-15",
+      end_at: "2026-10-15",
       attendees: 4,
       status: "Requested",
       amount: 150

@@ -1,0 +1,48 @@
+{
+  "users": [
+    { "id": "u_01", "name": "Elena Rostova", "email": "elena@company.com", "role": "employee" },
+    { "id": "u_02", "name": "Marcus Vance", "email": "marcus@company.com", "role": "manager" },
+    { "id": "u_03", "name": "Sarah Chen", "email": "sarah@company.com", "role": "finance" }
+  ],
+  "expenses": [
+    {
+      "id": "exp_001",
+      "description": "Flight to Tokyo Conference",
+      "amount": 1450.00,
+      "category": "Travel",
+      "submitter": "u_01",
+      "status": "Submitted",
+      "created_at": "2026-03-10",
+      "updated_at": "2026-03-10",
+      "_air_history": [
+        { "id": "exp_001:h1", "transition": "expenses.created", "event": "created", "action": "create", "from": null, "to": "Draft", "actor": { "actor": "users", "id": "u_01", "roles": ["employee"] }, "at": "2026-03-10T09:00:00Z", "comment": "", "completed": true },
+        { "id": "exp_001:h2", "transition": "expenses.submit", "event": "submitted", "action": "submit", "from": "Draft", "to": "Submitted", "actor": { "actor": "users", "id": "u_01", "roles": ["employee"] }, "at": "2026-03-10T09:15:00Z", "comment": "", "completed": true }
+      ]
+    },
+    {
+      "id": "exp_002",
+      "description": "Ergonomic Office Chair",
+      "amount": 380.00,
+      "category": "Equipment",
+      "submitter": "u_01",
+      "status": "Approved",
+      "created_at": "2026-03-05",
+      "updated_at": "2026-03-06",
+      "_air_history": [
+        { "id": "exp_002:h1", "transition": "expenses.created", "event": "created", "action": "create", "from": null, "to": "Draft", "actor": { "actor": "users", "id": "u_01", "roles": ["employee"] }, "at": "2026-03-05T10:00:00Z", "comment": "", "completed": true },
+        { "id": "exp_002:h2", "transition": "expenses.submit", "event": "submitted", "action": "submit", "from": "Draft", "to": "Submitted", "actor": { "actor": "users", "id": "u_01", "roles": ["employee"] }, "at": "2026-03-05T10:30:00Z", "comment": "", "completed": true },
+        { "id": "exp_002:h3", "transition": "expenses.approve", "event": "approved", "action": "approve", "from": "Submitted", "to": "Approved", "actor": { "actor": "users", "id": "u_02", "roles": ["manager"] }, "at": "2026-03-06T08:45:00Z", "comment": "", "completed": true }
+      ]
+    },
+    {
+      "id": "exp_003",
+      "description": "Team Dinner with Clients",
+      "amount": 240.00,
+      "category": "Meals",
+      "submitter": "u_01",
+      "status": "Draft",
+      "created_at": "2026-03-12",
+      "updated_at": "2026-03-12"
+    }
+  ]
+}

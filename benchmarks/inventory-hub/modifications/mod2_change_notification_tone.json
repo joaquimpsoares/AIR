@@ -1,0 +1,17 @@
+{
+  "task": "MOD2: Change notification tone",
+  "description": "Escalate low stock notification tone from warning to danger.",
+  "air": {
+    "files": ["showcase/inventory-hub/app.air"],
+    "contextSnippet": "notify inventory_balances.low_stock when=\"quantity_on_hand<=reorder_level&quantity_on_hand>0\" tone=warning label=\"Low Stock Alert\"",
+    "patch": "notify inventory_balances.low_stock when=\"quantity_on_hand<=reorder_level&quantity_on_hand>0\" tone=danger label=\"Low Stock Alert\"",
+    "filesTouched": 1
+  },
+  "conventional": {
+    "status": "PENDING",
+    "files": [],
+    "contextSnippet": "",
+    "patch": "",
+    "filesTouched": 0
+  }
+}

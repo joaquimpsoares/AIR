@@ -1,0 +1,36 @@
+air version=2
+app approval_workflow title="Expense Approval" subtitle="Guarded state transitions, authority policies, and audit timeline" initial=overview
+theme mode=dark accent=blue
+capability storage.local
+
+resource users label=name
+field users.name text required
+field users.email email required unique
+field users.role enum values=employee,manager,finance required default=employee
+actor users
+manage users create=admin edit=admin
+access users view=role:admin|self edit=role:admin
+
+resource expenses label=description
+field expenses.description text required min=3
+field expenses.amount money currency=USD required default=0
+field expenses.category enum values=Travel,Meals,Equipment,Software required default=Travel
+field expenses.submitter ref=users required
+field expenses.status enum values=Draft,Submitted,Approved,Rejected required default=Draft
+field expenses.created_at date required default=today
+field expenses.updated_at date required default=today
+
+manage expenses lifecycle=archive
+access expenses view=role:manager|role:finance|owner:submitter edit=role:manager|owner:submitter
+
+process expenses state=status initial=Draft terminal=Approved,Rejected history touch=updated_at
+transition expenses.submit from=Draft to=Submitted action=submit by=owner:submitter event=submitted
+transition expenses.approve from=Submitted to=Approved action=approve by=role:manager separate=submitter event=approved
+transition expenses.reject from=Submitted to=Rejected action=reject by=role:manager separate=submitter comment=required event=rejected
+
+highlight expenses.submitted when="status==Submitted" tone=warning
+highlight expenses.approved when="status==Approved" tone=positive
+highlight expenses.rejected when="status==Rejected" tone=danger
+
+overview
+insight expenses.total op=sum field=amount label="Total Expenses"

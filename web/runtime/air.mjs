@@ -119,7 +119,7 @@ const DECLARATION_KEYS = Object.freeze({
   actor: new Set(),
   field: new Set([
     "type", "label", "required", "unique", "values", "ref", "default",
-    "min", "placeholder", "long", "currency", "start", "end", "policy",
+    "min", "max", "placeholder", "long", "currency", "start", "end", "policy",
     "computed", "unit", "rate"
   ]),
   manage: new Set(["create", "edit", "delete", "lifecycle", "page_size"]),
@@ -134,9 +134,11 @@ const DECLARATION_KEYS = Object.freeze({
     "from", "to", "action", "by", "when", "automatic", "comment",
     "approvals", "distinct", "separate", "event", "within", "since", "unless_event"
   ]),
-  invariant: new Set(["when", "require", "immutable", "none", "exists", "scope", "overlaps", "deny", "where"]),
+  invariant: new Set(["when", "require", "immutable", "none", "exists", "scope", "overlaps", "deny", "where", "unique", "fields"]),
+  unique: new Set(["fields", "where", "deny", "when"]),
   deadline: new Set(["state", "after", "escalation"]),
   extension: new Set(["module", "slot"]),
+  notify: new Set(["on", "when", "audience", "tone", "label", "title", "body", "action", "target", "resource"]),
   experience: new Set([
     "actor", "identity", "title", "subtitle", "authority", "registration", "verification", "reset",
     "switch_user", "profile", "security", "sessions", "headline", "tagline", "primary_action",
@@ -149,17 +151,21 @@ const DECLARATION_KEYS = Object.freeze({
 const ID_KINDS = new Set([
   "app", "capability", "resource", "actor", "field", "manage", "access",
   "insight", "rule", "highlight", "parameter", "process", "transition",
-  "invariant", "deadline", "extension", "experience"
+  "invariant", "unique", "deadline", "extension", "experience", "notify"
 ]);
 const SINGLETON_KINDS = new Set(["air", "theme", "design", "overview"]);
-const FIELD_TYPES = new Set(["text", "email", "phone", "enum", "date", "datetime", "ref", "number", "money", "rate", "bool", "interval", "duration"]);
+const FIELD_TYPES = new Set(["text", "email", "phone", "enum", "date", "datetime", "ref", "number", "integer", "money", "rate", "ratio", "bool", "interval", "duration"]);
 const SEARCHABLE_TYPES = new Set(["text", "email", "phone"]);
 const FILTERABLE_TYPES = new Set(["enum", "ref", "bool"]);
-const NUMERIC_TYPES = new Set(["number", "money", "rate"]);
+const NUMERIC_TYPES = new Set(["number", "integer", "money", "rate", "ratio"]);
 const RATE_UNITS = new Set(["s", "m", "h", "d"]);
-const ACCENTS = new Set(["violet", "blue", "emerald", "rose", "amber"]);
-const MODES = new Set(["light", "dark", "system"]);
-const DENSITIES = new Set(["compact", "comfortable"]);
+export const ACCENTS = new Set([
+  "red", "orange", "amber", "yellow", "lime", "green", "emerald",
+  "teal", "cyan", "sky", "blue", "indigo", "violet", "purple",
+  "fuchsia", "pink", "rose"
+]);
+export const MODES = new Set(["light", "dark", "system"]);
+export const DENSITIES = new Set(["compact", "comfortable"]);
 const CAPABILITIES = new Set(["storage.local"]);
 const MISSING = Symbol("air.missing");
 
@@ -369,7 +375,7 @@ function permissionProperty(declaration, key, fallback = true) {
 function integerProperty(declaration, key, fallback, minimum = 0) {
   const raw = declaration.props[key];
   if (raw == null) return fallback;
-  if (raw === true || !/^\d+$/.test(raw) || Number(raw) < minimum) fail(`property \`${key}\` expects an integer >= ${minimum}`, declaration);
+  if (raw === true || !/^-?\d+$/.test(raw) || (minimum != null && Number(raw) < minimum)) fail(`property \`${key}\` expects an integer${minimum != null ? ` >= ${minimum}` : ""}`, declaration);
   return Number(raw);
 }
 
@@ -649,6 +655,134 @@ export function roundSymmetricRational(numerator, denominator) {
   return Number(isNeg ? -rounded : rounded);
 }
 
+export class Ratio {
+  constructor(numerator = 0n, denominator = 1n) {
+    if (numerator instanceof Ratio) {
+      this.numerator = numerator.numerator;
+      this.denominator = numerator.denominator;
+      return;
+    }
+    if (typeof numerator === "object" && numerator !== null && numerator.numerator !== undefined) {
+      this.numerator = BigInt(Math.trunc(Number(numerator.numerator) || 0));
+      this.denominator = BigInt(Math.trunc(Number(numerator.denominator) || 1));
+    } else if (typeof numerator === "string") {
+      const parsed = parseRatioOrPercentLiteral(numerator);
+      if (parsed) {
+        this.numerator = parsed.numerator;
+        this.denominator = parsed.denominator;
+      } else {
+        this.numerator = 0n;
+        this.denominator = 1n;
+      }
+    } else if (typeof numerator === "bigint" && typeof denominator === "bigint") {
+      this.numerator = numerator;
+      this.denominator = denominator;
+    } else {
+      this.numerator = BigInt(Math.trunc(Number(numerator) || 0));
+      this.denominator = BigInt(Math.trunc(Number(denominator) || 1));
+    }
+    if (this.denominator === 0n) throw new AirError("Ratio denominator cannot be zero");
+    if (this.denominator < 0n) {
+      this.numerator = -this.numerator;
+      this.denominator = -this.denominator;
+    }
+    // Canonical GCD simplification
+    const gcd = (a, b) => {
+      let x = a < 0n ? -a : a;
+      let y = b < 0n ? -b : b;
+      while (y > 0n) {
+        const t = y;
+        y = x % y;
+        x = t;
+      }
+      return x;
+    };
+    if (this.numerator !== 0n) {
+      const g = gcd(this.numerator, this.denominator);
+      if (g > 1n) {
+        this.numerator /= g;
+        this.denominator /= g;
+      }
+    }
+  }
+
+  toRatio() {
+    return Number(this.numerator) / Number(this.denominator);
+  }
+
+  toPercentage(digits = 2) {
+    const pct = (Number(this.numerator) / Number(this.denominator)) * 100;
+    return Number(pct.toFixed(digits));
+  }
+
+  valueOf() {
+    return this.toRatio();
+  }
+
+  toJSON() {
+    return { type: "ratio", numerator: Number(this.numerator), denominator: Number(this.denominator) };
+  }
+
+  toString() {
+    const pct = this.toPercentage(2);
+    const str = String(pct).replace(/\.0+$/, "").replace(/(\.\d+?)0+$/, "$1");
+    return `${str}%`;
+  }
+}
+
+export function parseRatioOrPercentLiteral(raw) {
+  if (raw == null) return null;
+  if (raw instanceof Ratio) return raw;
+  if (typeof raw === "object" && raw && raw.numerator !== undefined && raw.denominator !== undefined) {
+    return new Ratio(raw.numerator, raw.denominator);
+  }
+  if (typeof raw === "number") {
+    const str = String(raw);
+    if (!str.includes(".")) return new Ratio(BigInt(raw), 1n);
+    const [intPart, decPart] = str.split(".");
+    const den = 10n ** BigInt(decPart.length);
+    const num = BigInt(intPart) * den + (intPart.startsWith("-") ? -BigInt(decPart) : BigInt(decPart));
+    return new Ratio(num, den);
+  }
+  if (typeof raw !== "string") return null;
+  const str = raw.trim();
+  if (!str) return null;
+
+  // Percentage literal: e.g. "10%", "7.5%", "20 %"
+  const pctMatch = /^(-?\d+(?:\.\d+)?)\s*%$/.exec(str);
+  if (pctMatch) {
+    const numStr = pctMatch[1];
+    if (numStr.includes(".")) {
+      const [intPart, decPart] = numStr.split(".");
+      const den = (10n ** BigInt(decPart.length)) * 100n;
+      const num = BigInt(intPart) * (10n ** BigInt(decPart.length)) + (intPart.startsWith("-") ? -BigInt(decPart) : BigInt(decPart));
+      return new Ratio(num, den);
+    }
+    return new Ratio(BigInt(numStr), 100n);
+  }
+
+  // Fraction literal: e.g. "1/10"
+  const fracMatch = /^(-?\d+)\s*\/\s*(\d+)$/.exec(str);
+  if (fracMatch) {
+    return new Ratio(BigInt(fracMatch[1]), BigInt(fracMatch[2]));
+  }
+
+  // Plain decimal or integer string
+  const numMatch = /^(-?\d+)(?:\.(\d+))?$/.exec(str);
+  if (numMatch) {
+    const intPart = numMatch[1];
+    const decPart = numMatch[2];
+    if (decPart) {
+      const den = 10n ** BigInt(decPart.length);
+      const num = BigInt(intPart) * den + (intPart.startsWith("-") ? -BigInt(decPart) : BigInt(decPart));
+      return new Ratio(num, den);
+    }
+    return new Ratio(BigInt(intPart), 1n);
+  }
+
+  return null;
+}
+
 export class UtilizationRatio {
   constructor(numerator = 0, denominator = 1) {
     if (numerator instanceof UtilizationRatio) {
@@ -861,7 +995,7 @@ function scalarType(value) {
 }
 
 function numericSemanticType(type) {
-  return type === "number" || type === "money";
+  return type === "number" || type === "integer" || type === "money" || type === "ratio";
 }
 
 function splitOperandTerms(raw) {
@@ -917,6 +1051,56 @@ function conditionOperandType(terms, declaration, source) {
 }
 
 function parseConditionOperand(raw, declaration, resource, model, side) {
+  const trimmed = raw.trim();
+  const countMatch = /^count\((.+?)(?:\s+where\s+(.+))?\)$/.exec(trimmed);
+  if (countMatch) {
+    const targetRes = countMatch[1].trim();
+    const targetEntity = model.entities.get(targetRes);
+    if (!targetEntity) fail(`condition count references unknown resource \`${targetRes}\``, declaration);
+    const whereRaw = countMatch[2] ? countMatch[2].trim() : null;
+    return {
+      source: raw,
+      terms: [{
+        op: "+",
+        kind: "relational_count",
+        source: raw,
+        target: targetRes,
+        whereRaw,
+        where: whereRaw ? parseCondition(whereRaw, declaration, targetEntity, model, "count where") : null,
+        type: "integer",
+        currency: null
+      }],
+      type: "integer",
+      currency: null
+    };
+  }
+
+  const oneMatch = /^one\((.+?)(?:\s+where\s+(.+))?\)(?:\.([a-z0-9_]+))?$/.exec(trimmed);
+  if (oneMatch) {
+    const targetRes = oneMatch[1].trim();
+    const targetEntity = model.entities.get(targetRes);
+    if (!targetEntity) fail(`condition one lookup references unknown resource \`${targetRes}\``, declaration);
+    const whereRaw = oneMatch[2] ? oneMatch[2].trim() : null;
+    const fieldName = oneMatch[3] ? oneMatch[3].trim() : null;
+    const targetField = fieldName ? targetEntity.fieldMap.get(fieldName) : null;
+    const opType = targetField?.type ?? (fieldName ? "text" : "ref");
+    return {
+      source: raw,
+      terms: [{
+        op: "+",
+        kind: "relational_one",
+        source: raw,
+        target: targetRes,
+        whereRaw,
+        field: fieldName,
+        type: opType,
+        currency: targetField?.currency ?? null
+      }],
+      type: opType,
+      currency: targetField?.currency ?? null
+    };
+  }
+
   const parts = splitOperandTerms(raw);
   if (!parts.length) fail(`invalid condition operand \`${raw}\``, declaration);
   const terms = parts.map(({ op, raw: part }) => {
@@ -1013,6 +1197,7 @@ function promoteTextLiteral(operand, other, declaration) {
 }
 
 function validateConditionComparison(clause, declaration) {
+  if (clause.kind === "quantifier") return;
   promoteTextLiteral(clause.left, clause.right, declaration);
   promoteTextLiteral(clause.right, clause.left, declaration);
   const left = clause.left;
@@ -1080,6 +1265,22 @@ function parseCondition(raw, declaration, resource, model, property = "condition
   const alternatives = normalized.split("|").map((alternative) => {
     if (!alternative) fail(`${property} has an empty alternative`, declaration);
     return alternative.split("&").map((rawClause) => {
+      const trimmedClause = rawClause.trim();
+      const qMatch = /^(all|any|none)\((.+?)(?:\s+where\s+(.+))?\)$/.exec(trimmedClause);
+      if (qMatch) {
+        const targetRes = qMatch[2].trim();
+        const targetEntity = model.entities.get(targetRes);
+        if (!targetEntity) fail(`quantifier references unknown resource \`${targetRes}\``, declaration);
+        const whereRaw = qMatch[3] ? qMatch[3].trim() : null;
+        return {
+          source: rawClause,
+          kind: "quantifier",
+          quantifier: qMatch[1],
+          target: targetRes,
+          whereRaw,
+          where: whereRaw ? parseCondition(whereRaw, declaration, targetEntity, model, "quantifier where") : null
+        };
+      }
       const match = /^(.+?)(>=|<=|==|!=|>|<)(.+)$/.exec(rawClause);
       if (!match) fail(`${property} clause \`${rawClause}\` requires a comparison`, declaration);
       const clause = {
@@ -1095,6 +1296,7 @@ function parseCondition(raw, declaration, resource, model, property = "condition
   for (const conjunction of alternatives) {
     const numericBounds = new Map();
     for (const clause of conjunction) {
+      if (clause.kind === "quantifier") continue;
       if (clause.left.terms.length !== 1 || clause.left.terms[0].kind !== "path" || clause.right.terms.length !== 1) continue;
       const right = clause.right.terms[0];
       const value = right.kind === "parameter" ? right.value : right.kind === "literal" ? right.value : null;
@@ -1156,6 +1358,328 @@ function parseTransitionPolicy(raw, declaration, resource, model) {
   return parseAccessPolicy(raw, declaration, resource, model.actors, model.entities);
 }
 
+const COMPUTED_FN_NAMES = new Set(["sum", "count", "min", "max", "avg", "one"]);
+
+export function parseComputedExpression(raw, declaration) {
+  if (raw.endsWith(".duration") && !raw.includes("*") && !raw.includes("+") && !raw.includes("-")) {
+    const intervalField = raw.replace(/\.duration$/, "").trim();
+    return { kind: "interval_duration", intervalField };
+  }
+
+  const tokens = [];
+  let i = 0;
+  const s = raw.trim();
+
+  while (i < s.length) {
+    const ch = s[i];
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === "+" || ch === "-" || ch === "*" || ch === "(" || ch === ")") {
+      tokens.push({ type: "op", val: ch });
+      i++;
+      continue;
+    }
+    let buf = "";
+    while (i < s.length && !/[\s+*()\- ]/.test(s[i])) {
+      buf += s[i];
+      i++;
+    }
+    if (COMPUTED_FN_NAMES.has(buf) && s[i] === "(") {
+      i++; // consume (
+      let depth = 1;
+      let argsBuf = "";
+      while (i < s.length && depth > 0) {
+        if (s[i] === "(") depth++;
+        else if (s[i] === ")") depth--;
+        if (depth > 0) argsBuf += s[i];
+        i++;
+      }
+      let fieldAfter = null;
+      if (i < s.length && s[i] === ".") {
+        i++;
+        let fBuf = "";
+        while (i < s.length && !/[\s+*()\- ]/.test(s[i])) {
+          fBuf += s[i];
+          i++;
+        }
+        fieldAfter = fBuf;
+      }
+      tokens.push({ type: "fn", fn: buf, args: argsBuf.trim(), field: fieldAfter });
+    } else if (buf.endsWith("%") && /^-?\d+(?:\.\d+)?%$/.test(buf)) {
+      tokens.push({ type: "percent", val: buf });
+    } else if (/^-?\d+(?:\.\d+)?$/.test(buf)) {
+      tokens.push({ type: "number", val: buf });
+    } else {
+      tokens.push({ type: "ident", val: buf });
+    }
+  }
+
+  let tokenIdx = 0;
+  const peek = () => tokens[tokenIdx];
+  const consume = () => tokens[tokenIdx++];
+
+  function parsePrimary() {
+    const t = consume();
+    if (!t) fail(`unexpected end of computed expression \`${raw}\``, declaration);
+    if (t.type === "fn") {
+      const fn = t.fn;
+      const [targetFieldPart, whereRaw] = t.args.split(/\s+where\s+/);
+      const trimmedTargetField = (targetFieldPart || "").trim();
+      const trimmedWhere = whereRaw ? whereRaw.trim() : null;
+      let target = trimmedTargetField;
+      let field = null;
+      if (trimmedTargetField.includes(".")) {
+        const dotIdx = trimmedTargetField.indexOf(".");
+        target = trimmedTargetField.slice(0, dotIdx).trim();
+        field = trimmedTargetField.slice(dotIdx + 1).trim();
+      }
+      if (fn === "one") {
+        return {
+          kind: "lookup_one",
+          target,
+          whereRaw: trimmedWhere,
+          field: t.field || field
+        };
+      }
+      return {
+        kind: "collection_aggregate",
+        op: fn,
+        target,
+        field: t.field || field,
+        whereRaw: trimmedWhere
+      };
+    }
+    if (t.type === "percent") {
+      return { kind: "literal", value: parseRatioOrPercentLiteral(t.val), type: "ratio" };
+    }
+    if (t.type === "number") {
+      const num = Number(t.val);
+      const isInt = Number.isSafeInteger(num) && !t.val.includes(".");
+      return { kind: "literal", value: isInt ? num : num, type: isInt ? "integer" : "number" };
+    }
+    if (t.type === "ident") {
+      return { kind: "path", path: t.val };
+    }
+    if (t.type === "op" && t.val === "(") {
+      const expr = parseBinary(0);
+      const close = consume();
+      if (!close || close.val !== ")") fail(`unclosed parenthesis in computed expression \`${raw}\``, declaration);
+      return expr;
+    }
+    fail(`unexpected token \`${t.val}\` in computed expression \`${raw}\``, declaration);
+  }
+
+  function getPrecedence(op) {
+    if (op === "*") return 20;
+    if (op === "+" || op === "-") return 10;
+    return 0;
+  }
+
+  function parseBinary(minPrec) {
+    let left = parsePrimary();
+    while (tokenIdx < tokens.length) {
+      const t = peek();
+      if (t.type !== "op" || t.val === ")") break;
+      const prec = getPrecedence(t.val);
+      if (prec < minPrec) break;
+      consume();
+      const right = parseBinary(prec + 1);
+      left = { kind: "binary", op: t.val, left, right };
+    }
+    return left;
+  }
+
+  const ast = parseBinary(0);
+  if (tokenIdx < tokens.length) {
+    fail(`unexpected extra token \`${tokens[tokenIdx].val}\` in computed expression \`${raw}\``, declaration);
+  }
+  return { kind: "expression", source: raw, ast };
+}
+
+export function typeCheckComputedExpression(node, resource, model, field) {
+  if (node.kind === "interval_duration") {
+    const intField = resource.fieldMap.get(node.intervalField);
+    if (!intField || intField.type !== "interval") {
+      fail(`computed interval \`${field.address}\` references unknown interval \`${node.intervalField}\``);
+    }
+    return { type: "duration", currency: null, unit: null };
+  }
+
+  if (node.kind === "collection_aggregate") {
+    const targetEntity = model.entities.get(node.target);
+    if (!targetEntity) {
+      fail(`computed aggregate \`${field.address}\` references unknown resource \`${node.target}\``);
+    }
+    if (node.whereRaw) {
+      node.where = parseCondition(node.whereRaw, null, targetEntity, model, "aggregate where");
+    }
+    if (node.op === "count") {
+      const res = { type: "integer", currency: null, unit: null };
+      node.inferredType = res;
+      return res;
+    }
+    if (!node.field) {
+      fail(`computed aggregate \`${field.address}\` \`${node.op}\` requires a field on \`${node.target}\``);
+    }
+    const targetField = targetEntity.fieldMap.get(node.field);
+    if (!targetField) {
+      fail(`computed aggregate \`${field.address}\` references unknown field \`${node.target}.${node.field}\``);
+    }
+    const res = { type: targetField.type, currency: targetField.currency, unit: targetField.unit };
+    node.inferredType = res;
+    return res;
+  }
+
+  if (node.kind === "lookup_one") {
+    const targetEntity = model.entities.get(node.target);
+    if (!targetEntity) {
+      fail(`computed lookup \`${field.address}\` references unknown resource \`${node.target}\``);
+    }
+    if (node.field) {
+      const targetField = targetEntity.fieldMap.get(node.field);
+      if (!targetField) {
+        fail(`computed lookup \`${field.address}\` references unknown field \`${node.target}.${node.field}\``);
+      }
+      const res = { type: targetField.type, currency: targetField.currency, unit: targetField.unit };
+      node.inferredType = res;
+      return res;
+    }
+    const res = { type: "ref", ref: node.target, currency: null, unit: null };
+    node.inferredType = res;
+    return res;
+  }
+
+  if (node.kind === "path") {
+    if (node.path.endsWith(".duration")) {
+      const intFieldName = node.path.replace(/\.duration$/, "");
+      const intField = resource.fieldMap.get(intFieldName);
+      if (!intField || intField.type !== "interval") {
+        fail(`computed expression \`${field.address}\` references unknown interval \`${intFieldName}\``);
+      }
+      const res = { type: "duration", currency: null, unit: null };
+      node.inferredType = res;
+      return res;
+    }
+    const parts = node.path.split(".");
+    let currentRes = resource;
+    let targetField = null;
+    for (let i = 0; i < parts.length; i++) {
+      const seg = parts[i];
+      targetField = currentRes?.fieldMap?.get(seg);
+      if (!targetField) fail(`computed expression \`${field.address}\` references unknown field \`${seg}\``);
+      if (i < parts.length - 1) {
+        if (targetField.type !== "ref") fail(`computed path \`${node.path}\` crosses non-reference \`${targetField.id}\``);
+        currentRes = model.entities.get(targetField.ref);
+        if (!currentRes) fail(`computed path \`${node.path}\` references unknown resource \`${targetField.ref}\``);
+      }
+    }
+    const res = { type: targetField.type, currency: targetField.currency, unit: targetField.unit };
+    node.inferredType = res;
+    return res;
+  }
+
+  if (node.kind === "literal") {
+    const res = { type: node.type, currency: null, unit: null };
+    node.inferredType = res;
+    return res;
+  }
+
+  if (node.kind === "binary") {
+    const leftType = typeCheckComputedExpression(node.left, resource, model, field);
+    const rightType = typeCheckComputedExpression(node.right, resource, model, field);
+    node.left.inferredType = leftType;
+    node.right.inferredType = rightType;
+
+    if (node.op === "*") {
+      // 1. duration * rate or rate * duration
+      if ((leftType.type === "duration" && rightType.type === "rate") || (leftType.type === "rate" && rightType.type === "duration")) {
+        const rateInfo = leftType.type === "rate" ? leftType : rightType;
+        node.rateUnit = rateInfo.unit;
+        node.rateCurrency = rateInfo.currency;
+        const res = { type: "money", currency: rateInfo.currency, unit: null, rateUnit: rateInfo.unit };
+        node.inferredType = res;
+        return res;
+      }
+      // 2. (integer | number) * money or money * (integer | number)
+      if (((leftType.type === "integer" || leftType.type === "number") && rightType.type === "money") ||
+          (leftType.type === "money" && (rightType.type === "integer" || rightType.type === "number"))) {
+        const moneyInfo = leftType.type === "money" ? leftType : rightType;
+        const res = { type: "money", currency: moneyInfo.currency, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 3. ratio * money or money * ratio
+      if ((leftType.type === "ratio" && rightType.type === "money") || (leftType.type === "money" && rightType.type === "ratio")) {
+        const moneyInfo = leftType.type === "money" ? leftType : rightType;
+        const res = { type: "money", currency: moneyInfo.currency, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      fail(`computed product \`${field.address}\` requires a duration and a rate, or an integer/ratio and money; cannot multiply \`${leftType.type}\` and \`${rightType.type}\``, null, {
+        code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+      });
+    }
+
+    if (node.op === "+" || node.op === "-") {
+      // 1. money +/- money
+      if (leftType.type === "money" && rightType.type === "money") {
+        if (leftType.currency && rightType.currency && leftType.currency !== rightType.currency) {
+          fail(`computed money field \`${field.address}\` currency mismatch: cannot ${node.op === "+" ? "add" : "subtract"} \`${leftType.currency}\` and \`${rightType.currency}\``, null, {
+            code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+          });
+        }
+        const res = { type: "money", currency: leftType.currency ?? rightType.currency, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 2. duration +/- duration
+      if (leftType.type === "duration" && rightType.type === "duration") {
+        const res = { type: "duration", currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 3. (datetime | date) +/- duration
+      if ((leftType.type === "datetime" || leftType.type === "date") && rightType.type === "duration") {
+        const res = { type: leftType.type, currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 4. (datetime | date) - (datetime | date) -> duration
+      if (node.op === "-" && (leftType.type === "datetime" || leftType.type === "date") && (rightType.type === "datetime" || rightType.type === "date")) {
+        const res = { type: "duration", currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 5. integer +/- integer
+      if (leftType.type === "integer" && rightType.type === "integer") {
+        const res = { type: "integer", currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 6. (integer | number) +/- (integer | number)
+      if ((leftType.type === "integer" || leftType.type === "number") && (rightType.type === "integer" || rightType.type === "number")) {
+        const res = { type: "number", currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      // 7. (integer | number | ratio) +/- ratio or ratio +/- (integer | number) -> ratio
+      if ((leftType.type === "ratio" && (rightType.type === "ratio" || rightType.type === "integer" || rightType.type === "number")) ||
+          ((leftType.type === "integer" || leftType.type === "number") && rightType.type === "ratio")) {
+        const res = { type: "ratio", currency: null, unit: null };
+        node.inferredType = res;
+        return res;
+      }
+      fail(`computed expression \`${field.address}\` cannot ${node.op === "+" ? "add" : "subtract"} \`${leftType.type}\` and \`${rightType.type}\``, null, {
+        code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+      });
+    }
+  }
+
+  fail(`unrecognized computed node in \`${field.address}\``, null, { code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type" });
+}
+
 export function parseAir(source, options = {}) {
   const declarations = parseDeclarations(source);
   const model = {
@@ -1165,8 +1689,9 @@ export function parseAir(source, options = {}) {
     capabilities: new Set(), entities: new Map(), resources: null,
     actors: new Set(), management: new Map(), access: new Map(),
     parameters: new Map(), processes: new Map(), transitions: new Map(),
-    invariants: new Map(), deadlines: new Map(),
+    invariants: new Map(), uniqueConstraints: new Map(), deadlines: new Map(),
     rules: [], highlights: new Map(), pages: [], pageMap: new Map(),
+    notifications: [],
     extensions: [], experiences: [], declarations
   };
   model.resources = model.entities;
@@ -1198,9 +1723,15 @@ export function parseAir(source, options = {}) {
         const mode = stringProperty(declaration, "mode", "system");
         const accent = stringProperty(declaration, "accent", "violet");
         const density = stringProperty(declaration, "density", "comfortable");
-        if (!MODES.has(mode)) fail(`unknown theme mode \`${mode}\``, declaration);
-        if (!ACCENTS.has(accent)) fail(`unknown accent \`${accent}\``, declaration);
-        if (!DENSITIES.has(density)) fail(`unknown density \`${density}\``, declaration);
+        if (!MODES.has(mode)) {
+          fail(`unknown theme mode \`${mode}\`. Supported modes: light, dark, system. Use mode=light for a light/white interface.`, declaration, { phase: "validate", code: "AIR_THEME_INVALID_MODE" });
+        }
+        if (!ACCENTS.has(accent)) {
+          fail(`unknown accent \`${accent}\`. Supported accents: ${Array.from(ACCENTS).join(", ")}.`, declaration, { phase: "validate", code: "AIR_THEME_INVALID_ACCENT" });
+        }
+        if (!DENSITIES.has(density)) {
+          fail(`unknown density \`${density}\`. Supported densities: compact, comfortable.`, declaration, { phase: "validate", code: "AIR_THEME_INVALID_DENSITY" });
+        }
         model.theme = { mode, accent, density };
         break;
       }
@@ -1237,7 +1768,7 @@ export function parseAir(source, options = {}) {
       }
       case "actor": case "field": case "manage": case "access": case "overview":
       case "insight": case "rule": case "highlight": case "parameter":
-      case "process": case "transition": case "invariant": case "deadline": case "extension":
+      case "process": case "transition": case "invariant": case "unique": case "deadline": case "extension": case "notify":
         break;
       default: throw new Error("unreachable declaration kind");
     }
@@ -1266,7 +1797,8 @@ export function parseAir(source, options = {}) {
       values: listProperty(declaration, "values"), options: [],
       ref: stringProperty(declaration, "ref", null),
       default: stringProperty(declaration, "default", null),
-      min: integerProperty(declaration, "min", 0, 0),
+      min: integerProperty(declaration, "min", null, null),
+      max: integerProperty(declaration, "max", null, null),
       placeholder: stringProperty(declaration, "placeholder", ""),
       long: booleanProperty(declaration, "long"),
       currency: stringProperty(declaration, "currency", null),
@@ -1296,14 +1828,9 @@ export function parseAir(source, options = {}) {
       if (!startProp || !endProp) fail(`interval field \`${declaration.id}\` requires start=... and end=...`, declaration);
       field.computed = { kind: "interval", start: startProp, end: endProp, policy };
     } else if (computedProp) {
-      if (computedProp.includes("*")) {
-        const [left, right] = computedProp.split("*").map((s) => s.trim());
-        field.computed = { kind: "product", left, right, unit: unitProp ?? null };
-      } else if (computedProp.endsWith(".duration")) {
-        const intervalField = computedProp.replace(/\.duration$/, "").trim();
-        field.computed = { kind: "interval_duration", intervalField };
-      } else {
-        field.computed = { kind: "expression", source: computedProp };
+      field.computed = parseComputedExpression(computedProp, declaration);
+      if (unitProp && field.computed) {
+        field.computed.unit = unitProp;
       }
     }
     insertUnique(resource.fieldMap, field.id, field, declaration);
@@ -1317,53 +1844,34 @@ export function parseAir(source, options = {}) {
         if (!resource.fieldMap.has(field.start)) fail(`interval \`${resource.id}.${field.id}\` references unknown start field \`${field.start}\``);
         if (!resource.fieldMap.has(field.end)) fail(`interval \`${resource.id}.${field.id}\` references unknown end field \`${field.end}\``);
       }
-      if (field.computed?.kind === "product") {
-        const resolveStaticType = (pathStr) => {
-          if (pathStr.endsWith(".duration")) {
-            const intFieldName = pathStr.replace(/\.duration$/, "");
-            const intField = resource.fieldMap.get(intFieldName);
-            if (!intField || intField.type !== "interval") {
-              fail(`computed product \`${field.address}\` references unknown interval \`${intFieldName}\``);
-            }
-            return { type: "duration", currency: null, unit: null };
+      if (field.computed) {
+        if (field.computed.kind === "interval") {
+          if (!resource.fieldMap.has(field.start)) fail(`interval \`${resource.id}.${field.id}\` references unknown start field \`${field.start}\``);
+          if (!resource.fieldMap.has(field.end)) fail(`interval \`${resource.id}.${field.id}\` references unknown end field \`${field.end}\``);
+        } else if (field.computed.kind === "interval_duration") {
+          const intField = resource.fieldMap.get(field.computed.intervalField);
+          if (!intField || intField.type !== "interval") {
+            fail(`computed interval \`${field.address}\` references unknown interval \`${field.computed.intervalField}\``);
           }
-          const parts = pathStr.split(".");
-          let currentRes = resource;
-          let targetField = null;
-          for (let i = 0; i < parts.length; i++) {
-            const seg = parts[i];
-            targetField = currentRes?.fieldMap?.get(seg);
-            if (!targetField) fail(`computed product \`${field.address}\` references unknown field \`${seg}\``);
-            if (i < parts.length - 1) {
-              if (targetField.type !== "ref") fail(`computed path \`${pathStr}\` crosses non-reference \`${targetField.id}\``);
-              currentRes = model.entities.get(targetField.ref);
-              if (!currentRes) fail(`computed path \`${pathStr}\` references unknown resource \`${targetField.ref}\``);
+        } else if (field.computed.ast) {
+          const rootType = typeCheckComputedExpression(field.computed.ast, resource, model, field);
+          if (field.type === "money") {
+            if (rootType.type !== "money") {
+              fail(`computed money field \`${field.address}\` expression evaluated to \`${rootType.type}\`, expected \`money\``, null, {
+                code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+              });
             }
+            if (field.currency && rootType.currency && field.currency !== rootType.currency) {
+              fail(`computed money field \`${field.address}\` currency \`${field.currency}\` does not match ${rootType.rateUnit ? "rate " : "expression "}currency \`${rootType.currency}\``, null, {
+                code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+              });
+            }
+          } else if (field.type !== rootType.type) {
+            fail(`computed field \`${field.address}\` of type \`${field.type}\` expression evaluated to \`${rootType.type}\``, null, {
+              code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
+            });
           }
-          return { type: targetField.type, currency: targetField.currency, unit: targetField.unit };
-        };
-
-        const leftType = resolveStaticType(field.computed.left);
-        const rightType = resolveStaticType(field.computed.right);
-
-        const hasDuration = leftType.type === "duration" || rightType.type === "duration";
-        const hasRate = leftType.type === "rate" || rightType.type === "rate";
-        const rateInfo = leftType.type === "rate" ? leftType : rightType.type === "rate" ? rightType : null;
-
-        if (!hasDuration || !hasRate) {
-          fail(`computed product \`${field.address}\` requires a duration and a rate; cannot multiply \`${leftType.type}\` and \`${rightType.type}\``, null, {
-            code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
-          });
         }
-
-        if (field.type === "money" && field.currency && rateInfo.currency && field.currency !== rateInfo.currency) {
-          fail(`computed money field \`${field.address}\` currency \`${field.currency}\` does not match rate currency \`${rateInfo.currency}\``, null, {
-            code: "AIR_TYPE_COMPUTED_MISMATCH", phase: "type"
-          });
-        }
-
-        field.computed.rateUnit = rateInfo.unit;
-        field.computed.rateCurrency = rateInfo.currency;
       }
     }
     resource.labelField ??= resource.fields.find((field) => field.type === "text" && !field.long)?.id
@@ -1576,12 +2084,41 @@ export function parseAir(source, options = {}) {
     process.transitions.push(transition);
   }
 
+  for (const declaration of declarations.filter((item) => item.kind === "unique")) {
+    const [resourceId, constraintId] = splitOwnedId(declaration);
+    const resource = model.entities.get(resourceId);
+    if (!resource) fail(`unique owner \`${resourceId}\` is not a resource`, declaration);
+    const fields = listProperty(declaration, "fields");
+    if (!fields.length) fail("unique declaration requires fields=field1,field2,...", declaration);
+    for (const f of fields) {
+      const field = resource.fieldMap.get(f);
+      if (!field || field.computed) fail(`unique declaration references unknown or computed field \`${resourceId}.${f}\``, declaration);
+    }
+    const whereRaw = stringProperty(declaration, "where", null);
+    const whenRaw = stringProperty(declaration, "when", null);
+    const denyMessage = stringProperty(declaration, "deny", `Composite uniqueness violation on ${resource.singular || resourceId} (${fields.join(", ")})`);
+    const constraint = {
+      id: constraintId,
+      address: declaration.id,
+      resource: resourceId,
+      fields,
+      where: whereRaw ? parseCondition(whereRaw, declaration, resource, model, "unique where") : null,
+      when: whenRaw ? parseCondition(whenRaw, declaration, resource, model, "unique when") : null,
+      deny: denyMessage
+    };
+    const list = model.uniqueConstraints.get(resourceId) ?? [];
+    if (list.some((item) => item.id === constraintId)) fail(`duplicate unique constraint ID \`${declaration.id}\``, declaration);
+    list.push(constraint);
+    model.uniqueConstraints.set(resourceId, list);
+  }
+
   for (const declaration of declarations.filter((item) => item.kind === "invariant")) {
     const [resourceId, invariantId] = splitOwnedId(declaration);
     const resource = model.entities.get(resourceId);
     if (!resource) fail(`invariant owner \`${resourceId}\` is not a resource`, declaration);
     const required = listProperty(declaration, "require");
     const immutable = listProperty(declaration, "immutable");
+    const uniqueFields = listProperty(declaration, "unique").concat(listProperty(declaration, "fields"));
     const noneTarget = stringProperty(declaration, "none", null);
     const existsTarget = stringProperty(declaration, "exists", null);
     const scopeField = stringProperty(declaration, "scope", null);
@@ -1590,8 +2127,27 @@ export function parseAir(source, options = {}) {
     const whereRaw = stringProperty(declaration, "where", null);
     const whenRaw = stringProperty(declaration, "when", null);
 
-    if (!required.length && !immutable.length && !noneTarget && !existsTarget && !denyMessage) {
-      fail("invariant requires require=..., immutable=..., none=..., exists=..., or deny=...", declaration);
+    if (uniqueFields.length > 0) {
+      for (const f of uniqueFields) {
+        const field = resource.fieldMap.get(f);
+        if (!field || field.computed) fail(`invariant unique references unknown or computed field \`${resourceId}.${f}\``, declaration);
+      }
+      const constraint = {
+        id: invariantId,
+        address: declaration.id,
+        resource: resourceId,
+        fields: uniqueFields,
+        where: whereRaw ? parseCondition(whereRaw, declaration, resource, model, "unique where") : null,
+        when: whenRaw ? parseCondition(whenRaw, declaration, resource, model, "unique when") : null,
+        deny: denyMessage || `Composite uniqueness violation on ${resource.singular || resourceId} (${uniqueFields.join(", ")})`
+      };
+      const list = model.uniqueConstraints.get(resourceId) ?? [];
+      list.push(constraint);
+      model.uniqueConstraints.set(resourceId, list);
+    }
+
+    if (!required.length && !immutable.length && !noneTarget && !existsTarget && !denyMessage && !uniqueFields.length) {
+      fail("invariant requires require=..., immutable=..., unique=..., none=..., exists=..., or deny=...", declaration);
     }
     if (noneTarget && !model.entities.has(noneTarget)) fail(`unknown referenced resource \`${noneTarget}\``, declaration);
     if (existsTarget && !model.entities.has(existsTarget)) fail(`unknown referenced resource \`${existsTarget}\``, declaration);
@@ -1793,7 +2349,197 @@ export function parseAir(source, options = {}) {
     if (!allowExtensions.has(module)) fail(`extension module \`${module}\` is not allowed by this host`, declaration);
     model.extensions.push({ id: declaration.id, module, slot: stringProperty(declaration, "slot", "page") });
   }
+
+  for (const declaration of declarations.filter((item) => item.kind === "notify")) {
+    let resourceId, ruleId;
+    if (declaration.id.includes(".")) {
+      [resourceId, ruleId] = splitOwnedId(declaration);
+    } else {
+      ruleId = declaration.id;
+      resourceId = stringProperty(declaration, "resource", null) ?? stringProperty(declaration, "target", null);
+      if (!resourceId) {
+        fail(`notify declaration \`${declaration.id}\` requires a target resource (e.g. \`notify resource.rule_id\`)`, declaration);
+      }
+    }
+    const resource = model.entities.get(resourceId);
+    if (!resource) fail(`notify target \`${resourceId}\` is not a resource`, declaration);
+
+    const onRaw = stringProperty(declaration, "on", null);
+    const whenRaw = stringProperty(declaration, "when", null);
+    if (!onRaw && !whenRaw) {
+      fail(`notify \`${declaration.id}\` requires \`on=...\` (event) or \`when="..."\` (condition)`, declaration);
+    }
+
+    let when = null;
+    if (whenRaw) {
+      when = parseCondition(whenRaw, declaration, resource, model, "notify when");
+    }
+
+    const audienceRaw = stringProperty(declaration, "audience", "any");
+    const audience = parseAudienceSpec(audienceRaw, declaration, resource, model);
+
+    const tone = stringProperty(declaration, "tone", "info");
+    if (!new Set(["info", "success", "warning", "danger", "neutral"]).has(tone)) {
+      fail(`unknown notification tone \`${tone}\``, declaration);
+    }
+
+    const label = stringProperty(declaration, "label", titleCase(ruleId));
+    const title = stringProperty(declaration, "title", null);
+    const body = stringProperty(declaration, "body", null);
+    const action = stringProperty(declaration, "action", "detail");
+
+    const rule = {
+      id: declaration.id,
+      address: declaration.id,
+      ruleId,
+      resource: resourceId,
+      on: onRaw ? normalizeEventPattern(onRaw) : null,
+      onRaw,
+      when,
+      whenRaw,
+      audience,
+      audienceRaw,
+      tone,
+      label,
+      title,
+      body,
+      action
+    };
+
+    model.notifications.push(rule);
+  }
+
   return model;
+}
+
+function normalizeEventPattern(onRaw) {
+  if (!onRaw) return null;
+  const raw = String(onRaw).trim();
+  if (raw.startsWith("events.")) {
+    const parts = raw.slice(7).split(".");
+    return parts.at(-1);
+  }
+  if (raw.startsWith("transition.")) {
+    return `action:${raw.slice(11)}`;
+  }
+  if (raw.startsWith("action.")) {
+    return `action:${raw.slice(7)}`;
+  }
+  if (raw.startsWith("state.") || raw.startsWith("to.")) {
+    return `to:${raw.split(".").at(-1)}`;
+  }
+  if (raw === "create" || raw === "resource_created") return "created";
+  if (raw === "update" || raw === "mutation" || raw === "edit") return "updated";
+  return raw;
+}
+
+function parseAudienceSpec(raw, declaration, resource, model) {
+  if (!raw || raw === "any" || raw === "all" || raw === "*") {
+    return { kind: "any", raw: "any" };
+  }
+  if (raw === "owner") {
+    return { kind: "owner", raw: "owner" };
+  }
+  if (raw.startsWith("role:")) {
+    const roleStr = raw.slice(5);
+    const roles = roleStr.split("|").map((s) => s.trim().replace(/^role:/, ""));
+    return { kind: "role", role: roles.length === 1 ? roles[0] : roles, roles, raw };
+  }
+  if (raw.startsWith("path:")) {
+    const path = raw.slice(5).trim();
+    return { kind: "path", path, raw };
+  }
+  if (raw.includes("|")) {
+    const parts = raw.split("|").map((s) => s.trim());
+    return { kind: "multi", parts: parts.map((p) => parseAudienceSpec(p, declaration, resource, model)), raw };
+  }
+  return { kind: "role", role: raw, roles: [raw], raw };
+}
+
+function audienceMatches(audience, principal, record, resourceId, runtime) {
+  if (!audience || audience.kind === "any") return true;
+  const principalRoles = new Set([
+    ...(principal?.roles ?? []),
+    ...(principal?.role ? [principal.role] : [])
+  ]);
+
+  if (audience.kind === "role") {
+    if (Array.isArray(audience.roles)) {
+      return audience.roles.some((r) => principalRoles.has(r));
+    }
+    return principalRoles.has(audience.role);
+  }
+  if (audience.kind === "owner") {
+    if (!record || !principal) return false;
+    const actorId = principal.id;
+    if (!actorId) return false;
+    if (record.id === actorId || record.owner === actorId || record.user === actorId || record.created_by === actorId) return true;
+    return false;
+  }
+  if (audience.kind === "path") {
+    if (!record || !principal) return false;
+    let target = null;
+    if (typeof audience.path === "string") {
+      const parts = audience.path.split(".");
+      let current = record;
+      for (let i = 0; i < parts.length; i++) {
+        if (!current) { target = null; break; }
+        const field = parts[i];
+        if (i === parts.length - 1) {
+          target = current[field];
+        } else {
+          const refVal = current[field];
+          if (!refVal) { target = null; break; }
+          let found = null;
+          for (const ent of runtime.model.entities.values()) {
+            const candidate = runtime.records(ent.id).find((c) => c.id === refVal);
+            if (candidate) {
+              found = candidate;
+              break;
+            }
+          }
+          current = found;
+        }
+      }
+    } else if (Array.isArray(audience.path)) {
+      target = runtime.resolveReferencePath(record, audience.path);
+    }
+    return Boolean(principal.id && target === principal.id);
+  }
+  if (audience.kind === "multi") {
+    return audience.parts.some((part) => audienceMatches(part, principal, record, resourceId, runtime));
+  }
+  return false;
+}
+
+function formatNotificationContent(template, defaultFallback, resourceId, record, runtime) {
+  if (!template) return defaultFallback;
+  return template.replace(/\{([a-zA-Z0-9_.-]+)\}/g, (match, fieldPath) => {
+    if (fieldPath.includes(".")) {
+      const parts = fieldPath.split(".");
+      let cur = record;
+      let curRes = resourceId;
+      for (let i = 0; i < parts.length; i++) {
+        const seg = parts[i];
+        if (!cur) return "";
+        const f = runtime.model.entities.get(curRes)?.fieldMap.get(seg);
+        if (i === parts.length - 1) {
+          const val = cur[seg];
+          return val != null ? runtime.displayValue(curRes, seg, val) : "";
+        }
+        if (f?.type === "ref" && cur[seg]) {
+          cur = runtime.records(f.ref).find((c) => c.id === cur[seg]);
+          curRes = f.ref;
+        } else {
+          cur = cur[seg];
+        }
+      }
+      return "";
+    }
+    const val = record[fieldPath];
+    if (val === undefined || val === null) return "";
+    return runtime.displayValue(resourceId, fieldPath, val);
+  });
 }
 
 function isBlank(value) {
@@ -1808,6 +2554,26 @@ function validateScalar(field, value, model, records = null, currentId = null) {
   if (field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return `Enter a valid ${field.label.toLowerCase()}`;
   if (field.type === "enum" && !field.values.includes(text)) return `${field.label} must be one of ${field.values.join(", ")}`;
   if (field.type === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${field.label} must be a date`;
+  if (field.type === "integer") {
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) return `${field.label} must be a valid safe integer`;
+    } else if (typeof value === "string") {
+      if (!/^-?\d+$/.test(text.trim())) return `${field.label} must be an integer`;
+      const num = Number(text.trim());
+      if (!Number.isSafeInteger(num)) return `${field.label} is outside safe integer range`;
+    } else {
+      return `${field.label} must be an integer`;
+    }
+    const intVal = typeof value === "number" ? value : Number(text.trim());
+    if (field.min != null && intVal < field.min) return `${field.label} must be at least ${field.min}`;
+    if (field.max != null && intVal > field.max) return `${field.label} cannot be greater than ${field.max}`;
+    return null;
+  }
+  if (field.type === "ratio") {
+    const r = parseRatioOrPercentLiteral(value);
+    if (!r) return `${field.label} must be a valid ratio or percentage (e.g. 10%)`;
+    return null;
+  }
   if (NUMERIC_TYPES.has(field.type) && !Number.isFinite(Number(value))) return `${field.label} must be a number`;
   if (field.type === "duration" && !parseDurationLiteral(value) && typeof value !== "number" && !(value instanceof Duration)) return `${field.label} must be a duration`;
   if (field.type === "bool" && typeof value !== "boolean") return `${field.label} must be true or false`;
@@ -1820,12 +2586,22 @@ function normalizeInput(field, value, clock) {
   if (value == null || value === "") {
     if (field.default === "today") return clock().toISOString().slice(0, 10);
     if (field.default != null) {
+      if (field.type === "integer") return Number(field.default);
+      if (field.type === "ratio") return parseRatioOrPercentLiteral(field.default) ?? field.default;
       if (NUMERIC_TYPES.has(field.type)) return Number(field.default);
       if (field.type === "bool") return field.default === "true";
       if (field.type === "duration") return parseDurationLiteral(field.default) ?? field.default;
       return field.default;
     }
     return field.type === "bool" ? false : "";
+  }
+  if (field.type === "integer") {
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && /^-?\d+$/.test(value.trim())) return Number(value.trim());
+    return value;
+  }
+  if (field.type === "ratio") {
+    return parseRatioOrPercentLiteral(value) ?? value;
   }
   if (NUMERIC_TYPES.has(field.type)) return Number(value);
   if (field.type === "bool") return value === true || value === "true";
@@ -1837,16 +2613,31 @@ function normalizeRecord(resource, raw, clock, context) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new AirError(`${context} must be an object`);
   if (typeof raw.id !== "string" || !raw.id) throw new AirError(`${context} requires a string ID`);
   const storedFields = resource.fields.filter((field) => !field.computed);
-  const allowed = new Set(["id", "_archived_at", "_air_history", ...storedFields.map((field) => field.id)]);
+  const allowed = new Set(["id", "_archived_at", "_air_history", ...resource.fields.map((field) => field.id)]);
   for (const key of Object.keys(raw)) if (!allowed.has(key)) throw new AirError(`${context} has unknown field \`${key}\``);
   const record = { id: raw.id };
   for (const field of storedFields) record[field.id] = normalizeInput(field, raw[field.id], clock);
   if (raw._archived_at) record._archived_at = raw._archived_at;
   if (raw._air_history != null) {
-    if (!Array.isArray(raw._air_history) || raw._air_history.some((entry) => !entry || typeof entry !== "object" || typeof entry.event !== "string" || typeof entry.at !== "string")) {
+    if (!Array.isArray(raw._air_history)) {
       throw new AirError(`${context} has invalid workflow history`);
     }
-    record._air_history = structuredClone(raw._air_history);
+    const normalizedHistory = raw._air_history.map((entry, hIndex) => {
+      if (!entry || typeof entry !== "object") {
+        throw new AirError(`${context} history[${hIndex}] must be an object`);
+      }
+      const event = entry.event ?? (entry.action ? (entry.action === "create" ? "created" : entry.action === "submit" ? "submitted" : entry.action === "approve" ? "approved" : entry.action === "reject" ? "rejected" : entry.action) : "transition");
+      const at = entry.at ?? entry.timestamp ?? (typeof clock === "function" ? clock().toISOString() : new Date().toISOString());
+      if (typeof event !== "string" || typeof at !== "string") {
+        throw new AirError(`${context} history[${hIndex}] has invalid event or timestamp`);
+      }
+      return {
+        ...entry,
+        event,
+        at
+      };
+    });
+    record._air_history = normalizedHistory;
   }
   return record;
 }
@@ -1897,7 +2688,8 @@ export class AppRuntime {
     this.clock = options.clock ?? (() => new Date());
     this.timezone = options.timezone ?? model.app?.timezone ?? "UTC";
     this.idFactory = options.idFactory ?? ((resourceId) => `${resourceId.slice(0, 3)}_${globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10)}`);
-    this.storage = model.capabilities.has("storage.local") ? (options.storage ?? new MemoryStorage()) : new MemoryStorage();
+    this.storage = options.storage ?? new MemoryStorage();
+    this.namespace = options.namespace ?? null;
     this.principal = options.principal ?? { roles: [] };
     this.dataAdapters = options.dataAdapters instanceof Map
       ? options.dataAdapters
@@ -1907,6 +2699,8 @@ export class AppRuntime {
     this.data = new Map();
     this.subscribers = new Set();
     this.mutex = new AsyncMutex();
+    this.notificationsData = [];
+    this.conditionStates = new Map();
     this.load();
   }
 
@@ -1966,7 +2760,22 @@ export class AppRuntime {
     return this.dataAdapters.get(resourceId) ?? this.dataAdapters.get("*") ?? null;
   }
 
-  key(resourceId) { return `air:${this.model.app.id}:${resourceId}:v${this.model.version}`; }
+  key(resourceId) {
+    const prefix = this.namespace ? `${this.namespace}:` : "";
+    return `${prefix}air:${this.model.app?.id ?? "app"}:${resourceId}:v${this.model.version}`;
+  }
+  notificationKey() {
+    const prefix = this.namespace ? `${this.namespace}:` : "";
+    return `${prefix}air:${this.model.app?.id ?? "app"}:notifications:v${this.model.version}`;
+  }
+  conditionStatesKey() {
+    const prefix = this.namespace ? `${this.namespace}:` : "";
+    return `${prefix}air:${this.model.app?.id ?? "app"}:notification_conditions:v${this.model.version}`;
+  }
+  userNotificationStateKey(principalKey) {
+    const prefix = this.namespace ? `${this.namespace}:` : "";
+    return `${prefix}air:${this.model.app?.id ?? "app"}:notification_state:${principalKey}:v${this.model.version}`;
+  }
 
   load() {
     for (const resource of this.model.entities.values()) {
@@ -1992,6 +2801,42 @@ export class AppRuntime {
         if (Object.keys(errors).length) throw new AirError(`persisted ${resource.id}.${record.id} failed validation: ${Object.values(errors)[0]}`);
       }
     }
+
+    // Load notifications
+    const rawNotifs = this.storage.getItem(this.notificationKey());
+    if (rawNotifs) {
+      try { this.notificationsData = JSON.parse(rawNotifs); } catch { this.notificationsData = []; }
+    } else {
+      this.notificationsData = [];
+    }
+
+    // Load condition states
+    const rawConds = this.storage.getItem(this.conditionStatesKey());
+    if (rawConds) {
+      try {
+        const parsed = JSON.parse(rawConds);
+        this.conditionStates = new Map(Object.entries(parsed));
+      } catch {
+        this.conditionStates = new Map();
+      }
+    } else {
+      this.conditionStates = new Map();
+      // Part 5: Baseline condition evaluation on cold start without emitting
+      if (this.model.notifications) {
+        for (const rule of this.model.notifications) {
+          if (rule.when && this.model.entities.has(rule.resource)) {
+            for (const rec of this.records(rule.resource)) {
+              if (!rec._archived_at) {
+                const key = `${rule.id}:${rec.id}`;
+                const isActive = Boolean(this.evaluateCondition(rule.when, rule.resource, rec));
+                this.conditionStates.set(key, isActive);
+              }
+            }
+          }
+        }
+      }
+    }
+
     this.reconcile();
   }
 
@@ -2000,6 +2845,10 @@ export class AppRuntime {
       this.storage.removeItem(this.key(resource.id));
       this.data.set(resource.id, structuredClone(this.seedData.get(resource.id) ?? []));
     }
+    this.storage.removeItem(this.notificationKey());
+    this.storage.removeItem(this.conditionStatesKey());
+    this.notificationsData = [];
+    this.conditionStates = new Map();
     this.reconcile();
     this.emitChange({ type: "reset" });
   }
@@ -2067,7 +2916,60 @@ export class AppRuntime {
   conditionOperand(resourceId, record, operand) {
     const evaluatedTerms = operand.terms.map((term) => {
       let val;
-      if (term.kind === "literal" || term.kind === "parameter") val = term.value;
+      if (term.kind === "relational_count") {
+        const targetEntity = this.model.entities.get(term.target);
+        if (!targetEntity) return { ...term, evaluated: 0 };
+        const refField = targetEntity.fields.find((f) => f.type === "ref" && f.ref === resourceId);
+        let records = this.records(term.target).filter((r) => !r._archived_at);
+        if (refField && record?.id) {
+          records = records.filter((r) => r[refField.id] === record.id);
+        }
+        if (term.where) {
+          records = records.filter((r) => this.evaluateCondition(term.where, term.target, r));
+        }
+        val = records.length;
+      } else if (term.kind === "relational_one") {
+        let records = this.records(term.target).filter((r) => !r._archived_at);
+        if (term.whereRaw) {
+          const clauses = term.whereRaw.split("&");
+          records = records.filter((candidate) => {
+            return clauses.every((clauseStr) => {
+              const m = /^(.+?)(==|!=|>=|<=|>|<)(.+)$/.exec(clauseStr.trim());
+              if (!m) return true;
+              const targetField = m[1].trim();
+              const op = m[2];
+              const sourceFieldOrLit = m[3].trim();
+              const leftVal = candidate[targetField];
+              let rightVal;
+              if (record && Object.hasOwn(record, sourceFieldOrLit)) {
+                rightVal = record[sourceFieldOrLit];
+              } else if (sourceFieldOrLit.startsWith("@")) {
+                rightVal = this.model.parameters.get(resourceId)?.get(sourceFieldOrLit.slice(1))?.value;
+              } else {
+                rightVal = parseValue(sourceFieldOrLit);
+              }
+              if (op === "==") return String(leftVal ?? "").toLowerCase() === String(rightVal ?? "").toLowerCase();
+              if (op === "!=") return String(leftVal ?? "").toLowerCase() !== String(rightVal ?? "").toLowerCase();
+              if (op === ">") return leftVal > rightVal;
+              if (op === ">=") return leftVal >= rightVal;
+              if (op === "<") return leftVal < rightVal;
+              if (op === "<=") return leftVal <= rightVal;
+              return false;
+            });
+          });
+        }
+        if (records.length === 0) {
+          val = null;
+        } else if (records.length === 1) {
+          val = term.field ? (records[0][term.field] ?? null) : records[0];
+        } else {
+          throw new AirError(`AIR_CARDINALITY_ERROR: lookup \`one(${term.target})\` expected at most 1 matching record, but found ${records.length}`, null, {
+            code: "AIR_CARDINALITY_ERROR",
+            phase: "execute",
+            category: FAILURE_CATEGORIES.CARDINALITY_ERROR
+          });
+        }
+      } else if (term.kind === "literal" || term.kind === "parameter") val = term.value;
       else if (term.kind === "duration") val = term.duration;
       else if (term.kind === "temporal") {
         if (term.value === "today") val = this.currentDate();
@@ -2118,6 +3020,31 @@ export class AppRuntime {
     if (!condition || condition.source === "true") return true;
     if (condition.source === "false") return false;
     return condition.alternatives.some((clauses) => clauses.every((clause) => {
+      if (clause.kind === "quantifier") {
+        const targetEntity = this.model.entities.get(clause.target);
+        if (!targetEntity) return false;
+        const refField = targetEntity.fields.find((f) => f.type === "ref" && f.ref === resourceId);
+        let records = this.records(clause.target).filter((r) => !r._archived_at);
+        if (refField && record?.id) {
+          records = records.filter((r) => r[refField.id] === record.id);
+        }
+        if (records.length === 0) {
+          if (clause.quantifier === "all") return true;
+          if (clause.quantifier === "none") return true;
+          if (clause.quantifier === "any") return false;
+        }
+        if (clause.quantifier === "all") {
+          return records.every((c) => !clause.where || this.evaluateCondition(clause.where, clause.target, c));
+        }
+        if (clause.quantifier === "any") {
+          return records.some((c) => !clause.where || this.evaluateCondition(clause.where, clause.target, c));
+        }
+        if (clause.quantifier === "none") {
+          return !records.some((c) => !clause.where || this.evaluateCondition(clause.where, clause.target, c));
+        }
+        return false;
+      }
+
       const left = this.conditionOperand(resourceId, record, clause.left);
       const right = this.conditionOperand(resourceId, record, clause.right);
       if (left === MISSING || right === MISSING) return false;
@@ -2359,6 +3286,37 @@ export class AppRuntime {
         }
       }
     }
+
+    const uniqueConstraints = this.model.uniqueConstraints?.get(resourceId) ?? [];
+    for (const constraint of uniqueConstraints) {
+      if (constraint.when && !this.evaluateCondition(constraint.when, resourceId, values)) continue;
+      let hasBlank = false;
+      for (const f of constraint.fields) {
+        if (isBlank(values[f])) {
+          errors[f] = `${resource.fieldMap.get(f)?.label || f} is required for composite uniqueness`;
+          hasBlank = true;
+        }
+      }
+      if (hasBlank) continue;
+
+      for (const peer of peers) {
+        if (currentId != null && peer.id === currentId) continue;
+        if (peer._archived_at) continue;
+        if (constraint.where && !this.evaluateCondition(constraint.where, resourceId, peer)) continue;
+        const matchesAll = constraint.fields.every((f) => {
+          const valA = values[f];
+          const valB = peer[f];
+          return String(valA ?? "").toLowerCase() === String(valB ?? "").toLowerCase();
+        });
+        if (matchesAll) {
+          const msg = constraint.deny || `Composite uniqueness violation on ${resource.singular || resourceId} (${constraint.fields.join(", ")})`;
+          errors[constraint.fields[0]] = msg;
+          errors[constraint.id] = msg;
+          break;
+        }
+      }
+    }
+
     return errors;
   }
 
@@ -2373,6 +3331,212 @@ export class AppRuntime {
     return { record, errors };
   }
 
+  persistNotifications() {
+    this.storage.setItem(this.notificationKey(), JSON.stringify(this.notificationsData));
+  }
+
+  persistConditionStates() {
+    const obj = Object.fromEntries(this.conditionStates.entries());
+    this.storage.setItem(this.conditionStatesKey(), JSON.stringify(obj));
+  }
+
+  createNotificationInstance(rule, resourceId, record, eventMeta = null) {
+    const notifId = `notif_${rule.id}_${record.id}_${eventMeta?.eventId ?? eventMeta?.type ?? this.clock().valueOf()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    // Deduplicate event notification if identical event/rule/record already exists
+    if (eventMeta?.eventId) {
+      const existing = this.notificationsData.find(
+        (n) => n.ruleId === rule.id && n.eventId === eventMeta.eventId
+      );
+      if (existing) return existing;
+    }
+
+    const resource = this.model.entities.get(resourceId);
+    const formattedTitle = formatNotificationContent(rule.title, null, resourceId, record, this)
+      ?? this.displayValue(resourceId, resource?.labelField ?? "id", record[resource?.labelField ?? "id"]);
+
+    const formattedBody = formatNotificationContent(rule.body, null, resourceId, record, this)
+      ?? (rule.label ? `${rule.label} for ${resource?.singular || resourceId}` : "");
+
+    const instance = {
+      id: notifId,
+      ruleId: rule.id,
+      resource: resourceId,
+      recordId: record.id,
+      eventId: eventMeta?.eventId ?? null,
+      createdAt: this.clock().toISOString(),
+      tone: rule.tone ?? "info",
+      label: rule.label ?? titleCase(rule.ruleId || rule.id),
+      title: formattedTitle,
+      body: formattedBody,
+      audience: rule.audience,
+      action: {
+        resource: resourceId,
+        recordId: record.id,
+        purpose: rule.action ?? "detail"
+      }
+    };
+
+    this.notificationsData.unshift(instance);
+    this.persistNotifications();
+    this.emitChange({ type: "notification_created", notification: instance });
+    return instance;
+  }
+
+  evaluateNotificationRules(resourceId, eventMeta = null) {
+    if (!this.model.notifications || !this.model.notifications.length) return;
+    const rules = this.model.notifications.filter((r) => r.resource === resourceId);
+    if (!rules.length) return;
+
+    const records = this.records(resourceId).filter((r) => !r._archived_at);
+
+    for (const rule of rules) {
+      if (rule.on) {
+        // Event-based rule
+        if (eventMeta) {
+          let isMatch = false;
+          if (rule.on === "created" && eventMeta.type === "resource_created") isMatch = true;
+          else if (rule.on === "updated" && eventMeta.type === "mutation") isMatch = true;
+          else if (rule.on === "transition" && eventMeta.type === "workflow_transitioned") isMatch = true;
+          else if (rule.on.startsWith("action:") && eventMeta.type === "workflow_transitioned" && eventMeta.action === rule.on.slice(7)) isMatch = true;
+          else if (rule.on.startsWith("to:") && eventMeta.type === "workflow_transitioned" && eventMeta.toState === rule.on.slice(3)) isMatch = true;
+          else if (rule.on === eventMeta.action) isMatch = true;
+          else if (rule.on === eventMeta.toState) isMatch = true;
+
+          if (isMatch) {
+            const rec = eventMeta.record ?? records.find((r) => r.id === (eventMeta.recordId ?? eventMeta.record?.id));
+            if (rec) {
+              this.createNotificationInstance(rule, resourceId, rec, eventMeta);
+            }
+          }
+        }
+      }
+
+      if (rule.when) {
+        // Condition-transition-based rule (edge-triggered: false -> true)
+        for (const rec of records) {
+          const key = `${rule.id}:${rec.id}`;
+          const previousState = this.conditionStates.get(key) ?? false;
+          const currentState = Boolean(this.evaluateCondition(rule.when, resourceId, rec));
+
+          if (!previousState && currentState) {
+            // Edge triggered: false -> true
+            this.conditionStates.set(key, true);
+            this.persistConditionStates();
+            this.createNotificationInstance(rule, resourceId, rec, eventMeta);
+          } else if (previousState && !currentState) {
+            // Condition cleared: true -> false
+            this.conditionStates.set(key, false);
+            this.persistConditionStates();
+          }
+          // If true -> true: stays true, NO duplicate notification emitted!
+        }
+      }
+    }
+  }
+
+  principalKey(principal = this.principal) {
+    return `${principal?.actor ?? "user"}:${principal?.id ?? (principal?.roles && principal.roles.length > 0 ? principal.roles.join("_") : "anon")}`;
+  }
+
+  getUserNotificationStateMap(principal = this.principal) {
+    const key = this.userNotificationStateKey(this.principalKey(principal));
+    const raw = this.storage.getItem(key);
+    if (!raw) return {};
+    try { return JSON.parse(raw); } catch { return {}; }
+  }
+
+  setUserNotificationStateMap(map, principal = this.principal) {
+    const key = this.userNotificationStateKey(this.principalKey(principal));
+    this.storage.setItem(key, JSON.stringify(map));
+  }
+
+  getUserNotificationState(notificationId, principal = this.principal) {
+    const map = this.getUserNotificationStateMap(principal);
+    return map[notificationId] ?? { read: false, readAt: null, dismissed: false, dismissedAt: null };
+  }
+
+  notifications(options = {}) {
+    const principal = options.principal ?? this.principal;
+    const userMap = this.getUserNotificationStateMap(principal);
+    const results = [];
+
+    for (const notif of this.notificationsData) {
+      const entity = this.model.entities.get(notif.resource);
+      if (!entity) continue;
+      const rec = this.records(notif.resource).find((r) => r.id === notif.recordId);
+      if (!rec || rec._archived_at) continue;
+
+      // 1. Authority Check: Principal must be permitted to view the source record
+      if (!this.can(notif.resource, "view", rec)) continue;
+
+      // 2. Audience Check: Principal must match notification audience
+      if (!audienceMatches(notif.audience, principal, rec, notif.resource, this)) continue;
+
+      const uState = userMap[notif.id] ?? { read: false, readAt: null, dismissed: false, dismissedAt: null };
+      if (uState.dismissed && !options.includeDismissed) continue;
+      if (options.unreadOnly && uState.read) continue;
+
+      // Re-evaluate title and body to reflect live formatted values / ensure zero stale leaks
+      const rule = this.model.notifications?.find((r) => r.id === notif.ruleId);
+      const liveTitle = formatNotificationContent(rule?.title, notif.title, notif.resource, rec, this);
+      const liveBody = formatNotificationContent(rule?.body, notif.body, notif.resource, rec, this);
+
+      results.push({
+        ...notif,
+        title: liveTitle,
+        body: liveBody,
+        read: Boolean(uState.read),
+        readAt: uState.readAt,
+        dismissed: Boolean(uState.dismissed),
+        dismissedAt: uState.dismissedAt
+      });
+    }
+
+    return results.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf());
+  }
+
+  unreadNotificationCount(principal = this.principal) {
+    return this.notifications({ unreadOnly: true, principal }).length;
+  }
+
+  markNotificationAsRead(notificationId, principal = this.principal) {
+    const map = this.getUserNotificationStateMap(principal);
+    map[notificationId] = {
+      ...(map[notificationId] ?? {}),
+      read: true,
+      readAt: this.clock().toISOString()
+    };
+    this.setUserNotificationStateMap(map, principal);
+    this.emitChange({ type: "notification_state_changed", notificationId, read: true });
+  }
+
+  markAllNotificationsAsRead(principal = this.principal) {
+    const visible = this.notifications({ principal, unreadOnly: true });
+    const map = this.getUserNotificationStateMap(principal);
+    const now = this.clock().toISOString();
+    for (const notif of visible) {
+      map[notif.id] = {
+        ...(map[notif.id] ?? {}),
+        read: true,
+        readAt: now
+      };
+    }
+    this.setUserNotificationStateMap(map, principal);
+    this.emitChange({ type: "notification_state_changed", all: true, read: true });
+  }
+
+  dismissNotification(notificationId, principal = this.principal) {
+    const map = this.getUserNotificationStateMap(principal);
+    map[notificationId] = {
+      ...(map[notificationId] ?? {}),
+      dismissed: true,
+      dismissedAt: this.clock().toISOString()
+    };
+    this.setUserNotificationStateMap(map, principal);
+    this.emitChange({ type: "notification_state_changed", notificationId, dismissed: true });
+  }
+
   commit(resourceId, records, eventMeta = null) {
     this.storage.setItem(this.key(resourceId), JSON.stringify(records));
     this.data.set(resourceId, records);
@@ -2380,11 +3544,9 @@ export class AppRuntime {
     if (adapter && typeof adapter.syncFromRuntime === "function") {
       adapter.syncFromRuntime(resourceId, records);
     }
-    if (eventMeta) {
-      this.emitChange(eventMeta);
-    } else {
-      this.emitChange({ type: "mutation", resource: resourceId });
-    }
+    const resolvedEvent = eventMeta ?? { type: "mutation", resource: resourceId };
+    this.evaluateNotificationRules(resourceId, resolvedEvent);
+    this.emitChange(resolvedEvent);
   }
 
   create(resourceId, values) {
@@ -2409,7 +3571,7 @@ export class AppRuntime {
       record: stabilized
     });
     this.reconcile();
-    return { record: structuredClone(this.records(resourceId).find((item) => item.id === record.id)), errors, events };
+    return { record: this.get(resourceId, record.id), errors, events };
   }
 
   update(resourceId, id, values) {
@@ -2448,7 +3610,7 @@ export class AppRuntime {
       record
     });
     this.reconcile();
-    return { record: structuredClone(this.records(resourceId).find((item) => item.id === id)), errors };
+    return { record: this.get(resourceId, id), errors };
   }
 
   delete(resourceId, id) {
@@ -2847,6 +4009,12 @@ export class AppRuntime {
         if (field?.type === "rate") {
           return new MoneyRate(value, field.currency, field.unit);
         }
+        if (field?.type === "ratio") {
+          return value instanceof Ratio ? value : (value ? parseRatioOrPercentLiteral(value) : null);
+        }
+        if (field?.type === "integer") {
+          return value != null ? Math.trunc(Number(value)) : null;
+        }
         return value;
       }
       if (isBlank(value)) return null;
@@ -2858,91 +4026,372 @@ export class AppRuntime {
     return null;
   }
 
-  computedValue(field, ownerRecord, ownerResourceId = null) {
-    const definition = field.computed;
-    if (definition.kind === "workflow") return this.workflowStatus(ownerResourceId, ownerRecord)?.status ?? "";
-    if (definition.kind === "interval") {
-      return {
-        start: ownerRecord[definition.start],
-        end: ownerRecord[definition.end],
-        policy: definition.policy ?? "[start,end)"
-      };
+  evaluateComputedNode(node, ownerRecord, ownerResourceId) {
+    if (!node) return null;
+    if (node.kind === "collection_aggregate") {
+      const targetEntity = this.model.entities.get(node.target);
+      if (!targetEntity) return null;
+      const refField = targetEntity.fields.find((f) => f.type === "ref" && f.ref === ownerResourceId);
+      let records = this.records(node.target).filter((r) => !r._archived_at);
+      if (refField && ownerRecord?.id) {
+        records = records.filter((r) => r[refField.id] === ownerRecord.id);
+      }
+      if (node.where) {
+        records = records.filter((r) => this.evaluateCondition(node.where, node.target, r));
+      }
+      if (node.op === "count") {
+        return records.length;
+      }
+      if (node.op === "sum") {
+        if (!records.length) return 0;
+        const isMoney = node.inferredType?.type === "money" || targetEntity.fieldMap.get(node.field)?.type === "money";
+        if (isMoney) {
+          let totalMinor = 0n;
+          for (const r of records) {
+            const v = this.resolvePathValue(node.target, r, node.field);
+            const m = parseMoneyToMinorUnits(v);
+            if (m !== null) totalMinor += m;
+          }
+          return Number(totalMinor) / 100;
+        }
+        let total = 0;
+        for (const r of records) {
+          const v = this.resolvePathValue(node.target, r, node.field);
+          if (v instanceof Duration) total += v.ms;
+          else if (typeof v === "number") total += v;
+        }
+        return node.inferredType?.type === "duration" ? new Duration(total) : total;
+      }
+      if (node.op === "min") {
+        if (!records.length) return null;
+        let minVal = null;
+        for (const r of records) {
+          const v = this.resolvePathValue(node.target, r, node.field);
+          if (v != null) {
+            if (minVal === null || v < minVal) minVal = v;
+          }
+        }
+        return minVal;
+      }
+      if (node.op === "max") {
+        if (!records.length) return null;
+        let maxVal = null;
+        for (const r of records) {
+          const v = this.resolvePathValue(node.target, r, node.field);
+          if (v != null) {
+            if (maxVal === null || v > maxVal) maxVal = v;
+          }
+        }
+        return maxVal;
+      }
+      if (node.op === "avg") {
+        if (!records.length) return null;
+        const isMoney = node.inferredType?.type === "money" || targetEntity.fieldMap.get(node.field)?.type === "money";
+        if (isMoney) {
+          let totalMinor = 0n;
+          let count = 0n;
+          for (const r of records) {
+            const v = this.resolvePathValue(node.target, r, node.field);
+            const m = parseMoneyToMinorUnits(v);
+            if (m !== null) {
+              totalMinor += m;
+              count += 1n;
+            }
+          }
+          if (count === 0n) return null;
+          const isNeg = totalMinor < 0n;
+          const absTot = isNeg ? -totalMinor : totalMinor;
+          const roundedMinor = (2n * absTot + count) / (2n * count);
+          return Number(isNeg ? -roundedMinor : roundedMinor) / 100;
+        }
+        let total = 0;
+        let count = 0;
+        for (const r of records) {
+          const v = this.resolvePathValue(node.target, r, node.field);
+          if (typeof v === "number") {
+            total += v;
+            count++;
+          } else if (v instanceof Duration) {
+            total += v.ms;
+            count++;
+          }
+        }
+        if (count === 0) return null;
+        return node.inferredType?.type === "duration" ? new Duration(Math.round(total / count)) : total / count;
+      }
+      return null;
     }
-    if (definition.kind === "interval_duration") {
-      const intervalVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.intervalField);
+    if (node.kind === "lookup_one") {
+      let records = this.records(node.target).filter((r) => !r._archived_at);
+      if (node.whereRaw) {
+        const clauses = node.whereRaw.split("&");
+        records = records.filter((candidate) => {
+          return clauses.every((clauseStr) => {
+            const m = /^(.+?)(==|!=|>=|<=|>|<)(.+)$/.exec(clauseStr.trim());
+            if (!m) return true;
+            const targetField = m[1].trim();
+            const op = m[2];
+            const sourceFieldOrLit = m[3].trim();
+            const leftVal = candidate[targetField];
+            let rightVal;
+            if (ownerRecord && Object.hasOwn(ownerRecord, sourceFieldOrLit)) {
+              rightVal = ownerRecord[sourceFieldOrLit];
+            } else if (sourceFieldOrLit.startsWith("@")) {
+              rightVal = this.model.parameters.get(ownerResourceId)?.get(sourceFieldOrLit.slice(1))?.value;
+            } else {
+              rightVal = parseValue(sourceFieldOrLit);
+            }
+            if (op === "==") return String(leftVal ?? "").toLowerCase() === String(rightVal ?? "").toLowerCase();
+            if (op === "!=") return String(leftVal ?? "").toLowerCase() !== String(rightVal ?? "").toLowerCase();
+            if (op === ">") return leftVal > rightVal;
+            if (op === ">=") return leftVal >= rightVal;
+            if (op === "<") return leftVal < rightVal;
+            if (op === "<=") return leftVal <= rightVal;
+            return false;
+          });
+        });
+      }
+      if (records.length === 0) return null;
+      if (records.length > 1) {
+        throw new AirError(`AIR_CARDINALITY_ERROR: lookup \`one(${node.target})\` expected at most 1 matching record, but found ${records.length}`, null, {
+          code: "AIR_CARDINALITY_ERROR",
+          phase: "execute",
+          category: FAILURE_CATEGORIES.CARDINALITY_ERROR
+        });
+      }
+      const matched = records[0];
+      return node.field ? (matched[node.field] ?? null) : matched;
+    }
+    if (node.kind === "interval_duration") {
+      const intervalVal = this.resolvePathValue(ownerResourceId, ownerRecord, node.intervalField);
       return getIntervalDuration(intervalVal);
     }
-    if (definition.kind === "product") {
-      const leftVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.left);
-      const rightVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.right);
-      let durationMs = null;
-      let rateObj = null;
+    if (node.kind === "path") {
+      if (node.path.endsWith(".duration")) {
+        const intFieldName = node.path.replace(/\.duration$/, "");
+        const intVal = this.resolvePathValue(ownerResourceId, ownerRecord, intFieldName);
+        return getIntervalDuration(intVal);
+      }
+      return this.resolvePathValue(ownerResourceId, ownerRecord, node.path);
+    }
+    if (node.kind === "literal") {
+      return node.value;
+    }
+    if (node.kind === "binary") {
+      const leftVal = this.evaluateComputedNode(node.left, ownerRecord, ownerResourceId);
+      const rightVal = this.evaluateComputedNode(node.right, ownerRecord, ownerResourceId);
+      if (leftVal === null || leftVal === undefined || rightVal === null || rightVal === undefined) return null;
 
-      if (leftVal instanceof Duration) durationMs = leftVal.ms;
-      else if (typeof leftVal === "object" && leftVal && leftVal.start && leftVal.end) durationMs = getIntervalDuration(leftVal)?.ms ?? null;
-      
-      if (rightVal instanceof Duration) durationMs = rightVal.ms;
-      else if (typeof rightVal === "object" && rightVal && rightVal.start && rightVal.end) durationMs = getIntervalDuration(rightVal)?.ms ?? null;
+      if (node.op === "*") {
+        // 1. duration * rate or rate * duration
+        let durationMs = null;
+        let rateObj = null;
+        if (leftVal instanceof Duration) durationMs = leftVal.ms;
+        else if (typeof leftVal === "object" && leftVal && leftVal.start && leftVal.end) durationMs = getIntervalDuration(leftVal)?.ms ?? null;
+        if (rightVal instanceof Duration) durationMs = rightVal.ms;
+        else if (typeof rightVal === "object" && rightVal && rightVal.start && rightVal.end) durationMs = getIntervalDuration(rightVal)?.ms ?? null;
+        if (leftVal instanceof MoneyRate) rateObj = leftVal;
+        if (rightVal instanceof MoneyRate) rateObj = rightVal;
 
-      if (leftVal instanceof MoneyRate) rateObj = leftVal;
-      if (rightVal instanceof MoneyRate) rateObj = rightVal;
+        if (durationMs != null && rateObj != null) {
+          const res = multiplyMoneyRate(rateObj.amount, rateObj.currency, durationMs, rateObj.unit);
+          return res ? res.amount : 0;
+        }
 
-      if (durationMs == null || rateObj == null) {
-        throw new AirError(`computed product \`${field.address}\` requires a duration and a rate`);
+        // 2. ratio * money or money * ratio
+        const isRatio = leftVal instanceof Ratio || rightVal instanceof Ratio || (typeof leftVal === "object" && leftVal?.type === "ratio") || (typeof rightVal === "object" && rightVal?.type === "ratio");
+        if (isRatio) {
+          const ratioVal = leftVal instanceof Ratio ? leftVal : (rightVal instanceof Ratio ? rightVal : (leftVal && typeof leftVal === "object" && leftVal.type === "ratio" ? new Ratio(leftVal) : new Ratio(rightVal)));
+          const moneyVal = (leftVal instanceof Ratio || (typeof leftVal === "object" && leftVal?.type === "ratio")) ? rightVal : leftVal;
+          const moneyMinor = parseMoneyToMinorUnits(moneyVal);
+          if (moneyMinor === null || !ratioVal) return null;
+          const num = moneyMinor * ratioVal.numerator;
+          const den = ratioVal.denominator;
+          if (den === 0n) return 0;
+          const isNeg = (num < 0n) !== (den < 0n);
+          const absNum = num < 0n ? -num : num;
+          const absDen = den < 0n ? -den : den;
+          const roundedMinor = (2n * absNum + absDen) / (2n * absDen);
+          const finalMinor = isNeg ? -roundedMinor : roundedMinor;
+          return Number(finalMinor) / 100;
+        }
+
+        // 3. (integer | number) * money or money * (integer | number)
+        let moneyVal, countVal;
+        if (node.left?.inferredType?.type === "money") {
+          moneyVal = leftVal;
+          countVal = rightVal;
+        } else if (node.right?.inferredType?.type === "money") {
+          moneyVal = rightVal;
+          countVal = leftVal;
+        } else if (Number.isSafeInteger(Number(leftVal)) && !Number.isSafeInteger(Number(rightVal))) {
+          countVal = leftVal;
+          moneyVal = rightVal;
+        } else if (Number.isSafeInteger(Number(rightVal)) && !Number.isSafeInteger(Number(leftVal))) {
+          countVal = rightVal;
+          moneyVal = leftVal;
+        } else {
+          moneyVal = rightVal;
+          countVal = leftVal;
+        }
+        const moneyMinor = parseMoneyToMinorUnits(moneyVal);
+        if (moneyMinor === null || countVal === null) return null;
+        const countBig = BigInt(Math.trunc(Number(countVal)));
+        const resMinor = moneyMinor * countBig;
+        return Number(resMinor) / 100;
       }
 
-      if (field.currency && rateObj.currency && field.currency !== rateObj.currency) {
-        throw new AirError(`computed money field \`${field.address}\` currency \`${field.currency}\` does not match rate currency \`${rateObj.currency}\``);
+      if (node.op === "+") {
+        const isRatio = leftVal instanceof Ratio || rightVal instanceof Ratio || (typeof leftVal === "object" && leftVal?.type === "ratio") || (typeof rightVal === "object" && rightVal?.type === "ratio");
+        if (isRatio) {
+          const ratioA = leftVal instanceof Ratio ? leftVal : (typeof leftVal === "object" && leftVal?.type === "ratio" ? new Ratio(leftVal) : new Ratio(Number(leftVal), 1));
+          const ratioB = rightVal instanceof Ratio ? rightVal : (typeof rightVal === "object" && rightVal?.type === "ratio" ? new Ratio(rightVal) : new Ratio(Number(rightVal), 1));
+          const num = ratioA.numerator * ratioB.denominator + ratioB.numerator * ratioA.denominator;
+          const den = ratioA.denominator * ratioB.denominator;
+          return new Ratio(num, den);
+        }
+        if (leftVal instanceof Duration && rightVal instanceof Duration) {
+          return new Duration(leftVal.ms + rightVal.ms);
+        }
+        const minorA = parseMoneyToMinorUnits(leftVal);
+        const minorB = parseMoneyToMinorUnits(rightVal);
+        if (minorA !== null && minorB !== null) {
+          return Number(minorA + minorB) / 100;
+        }
+        if (typeof leftVal === "number" && typeof rightVal === "number") {
+          return leftVal + rightVal;
+        }
       }
 
-      const res = multiplyMoneyRate(rateObj.amount, rateObj.currency, durationMs, rateObj.unit);
-      return res ? res.amount : 0;
-    }
-    if (definition.kind === "expression") {
-      return this.resolvePathValue(ownerResourceId, ownerRecord, definition.source);
-    }
-    let records = this.records(definition.source)
-      .filter((record) => !record._archived_at)
-      .filter((record) => this.can(definition.source, "view", record))
-      .filter((record) => record[definition.group] === ownerRecord.id);
-    if (definition.where) records = records.filter((record) => this.evaluateCondition(definition.where, definition.source, record));
-    if (definition.window === "month") {
-      const month = this.clock().toISOString().slice(0, 7);
-      records = records.filter((record) => String(record[definition.date] ?? "").slice(0, 7) === month);
-    }
-    if (definition.op === "count") return records.length;
-    const isDurationField = definition.field?.endsWith(".duration") || this.model.entities.get(definition.source)?.fieldMap?.get(definition.field)?.type === "duration";
-    if (isDurationField) {
-      const durValues = records.map((record) => {
-        const val = this.resolvePathValue(definition.source, record, definition.field);
-        if (val instanceof Duration) return val.ms;
-        if (typeof val === "object" && val && val.start && val.end) return getIntervalDuration(val)?.ms ?? null;
-        if (typeof val === "number") return val;
-        const parsed = parseDurationLiteral(val);
-        return parsed ? parsed.ms : null;
-      }).filter((v) => v !== null && Number.isFinite(v));
-      if (!durValues.length) return new Duration(0);
-      if (definition.op === "sum") return new Duration(durValues.reduce((t, v) => t + v, 0));
-      if (definition.op === "average" || definition.op === "avg") {
-        const sumMs = durValues.reduce((t, v) => t + v, 0);
-        return new Duration(roundSymmetricRational(sumMs, durValues.length));
+      if (node.op === "-") {
+        const isRatio = leftVal instanceof Ratio || rightVal instanceof Ratio || (typeof leftVal === "object" && leftVal?.type === "ratio") || (typeof rightVal === "object" && rightVal?.type === "ratio");
+        if (isRatio) {
+          const ratioA = leftVal instanceof Ratio ? leftVal : (typeof leftVal === "object" && leftVal?.type === "ratio" ? new Ratio(leftVal) : new Ratio(Number(leftVal), 1));
+          const ratioB = rightVal instanceof Ratio ? rightVal : (typeof rightVal === "object" && rightVal?.type === "ratio" ? new Ratio(rightVal) : new Ratio(Number(rightVal), 1));
+          const num = ratioA.numerator * ratioB.denominator - ratioB.numerator * ratioA.denominator;
+          const den = ratioA.denominator * ratioB.denominator;
+          return new Ratio(num, den);
+        }
+        if (leftVal instanceof Duration && rightVal instanceof Duration) {
+          return new Duration(leftVal.ms - rightVal.ms);
+        }
+        const minorA = parseMoneyToMinorUnits(leftVal);
+        const minorB = parseMoneyToMinorUnits(rightVal);
+        if (minorA !== null && minorB !== null) {
+          return Number(minorA - minorB) / 100;
+        }
+        if (typeof leftVal === "number" && typeof rightVal === "number") {
+          return leftVal - rightVal;
+        }
       }
-      if (definition.op === "min") return new Duration(Math.min(...durValues));
-      if (definition.op === "max") return new Duration(Math.max(...durValues));
     }
-    const values = records.map((record) => Number(record[definition.field])).filter(Number.isFinite);
-    if (definition.op === "sum") return values.reduce((total, value) => total + value, 0);
-    if (definition.op === "average" || definition.op === "avg") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
-    if (definition.op === "min") return values.length ? Math.min(...values) : 0;
-    if (definition.op === "max") return values.length ? Math.max(...values) : 0;
-    throw new AirError(`unknown computed operation \`${definition.op}\``);
+    return null;
+  }
+
+  computedValue(field, ownerRecord, ownerResourceId = null) {
+    const definition = field.computed;
+    if (!definition) return null;
+    this._computationStack = this._computationStack || new Set();
+    const stackKey = `${ownerResourceId || ""}:${ownerRecord?.id || "new"}:${field.id}`;
+    if (this._computationStack.has(stackKey)) {
+      throw new AirError(`AIR_CYCLE_DETECTED: Dependency cycle detected in computed value \`${field.address}\``, null, {
+        code: "AIR_CYCLE_DETECTED",
+        phase: "execute",
+        category: FAILURE_CATEGORIES.COMPUTED_CYCLE
+      });
+    }
+    this._computationStack.add(stackKey);
+    try {
+      if (definition.kind === "workflow") return this.workflowStatus(ownerResourceId, ownerRecord)?.status ?? "";
+      if (definition.kind === "interval") {
+        return {
+          start: ownerRecord[definition.start],
+          end: ownerRecord[definition.end],
+          policy: definition.policy ?? "[start,end)"
+        };
+      }
+      if (definition.kind === "interval_duration") {
+        const intervalVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.intervalField);
+        return getIntervalDuration(intervalVal);
+      }
+      if (definition.ast) {
+        return this.evaluateComputedNode(definition.ast, ownerRecord, ownerResourceId);
+      }
+      if (definition.kind === "product") {
+        const leftVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.left);
+        const rightVal = this.resolvePathValue(ownerResourceId, ownerRecord, definition.right);
+        let durationMs = null;
+        let rateObj = null;
+
+        if (leftVal instanceof Duration) durationMs = leftVal.ms;
+        else if (typeof leftVal === "object" && leftVal && leftVal.start && leftVal.end) durationMs = getIntervalDuration(leftVal)?.ms ?? null;
+        
+        if (rightVal instanceof Duration) durationMs = rightVal.ms;
+        else if (typeof rightVal === "object" && rightVal && rightVal.start && rightVal.end) durationMs = getIntervalDuration(rightVal)?.ms ?? null;
+
+        if (leftVal instanceof MoneyRate) rateObj = leftVal;
+        if (rightVal instanceof MoneyRate) rateObj = rightVal;
+
+        if (durationMs != null && rateObj != null) {
+          const res = multiplyMoneyRate(rateObj.amount, rateObj.currency, durationMs, rateObj.unit);
+          return res ? res.amount : 0;
+        }
+        return null;
+      }
+      if (definition.kind === "expression") {
+        return this.resolvePathValue(ownerResourceId, ownerRecord, definition.source);
+      }
+      let records = this.records(definition.source)
+        .filter((record) => !record._archived_at)
+        .filter((record) => this.can(definition.source, "view", record))
+        .filter((record) => record[definition.group] === ownerRecord.id);
+      if (definition.where) records = records.filter((record) => this.evaluateCondition(definition.where, definition.source, record));
+      if (definition.window === "month") {
+        const month = this.clock().toISOString().slice(0, 7);
+        records = records.filter((record) => String(record[definition.date] ?? "").slice(0, 7) === month);
+      }
+      if (definition.op === "count") return records.length;
+      const isDurationField = definition.field?.endsWith(".duration") || this.model.entities.get(definition.source)?.fieldMap?.get(definition.field)?.type === "duration";
+      if (isDurationField) {
+        const durValues = records.map((record) => {
+          const val = this.resolvePathValue(definition.source, record, definition.field);
+          if (val instanceof Duration) return val.ms;
+          if (typeof val === "object" && val && val.start && val.end) return getIntervalDuration(val)?.ms ?? null;
+          if (typeof val === "number") return val;
+          const parsed = parseDurationLiteral(val);
+          return parsed ? parsed.ms : null;
+        }).filter((v) => v !== null && Number.isFinite(v));
+        if (!durValues.length) return new Duration(0);
+        if (definition.op === "sum") return new Duration(durValues.reduce((t, v) => t + v, 0));
+        if (definition.op === "average" || definition.op === "avg") {
+          const sumMs = durValues.reduce((t, v) => t + v, 0);
+          return new Duration(roundSymmetricRational(sumMs, durValues.length));
+        }
+        if (definition.op === "min") return new Duration(Math.min(...durValues));
+        if (definition.op === "max") return new Duration(Math.max(...durValues));
+      }
+      const values = records.map((record) => Number(record[definition.field])).filter(Number.isFinite);
+      if (definition.op === "sum") return values.reduce((total, value) => total + value, 0);
+      if (definition.op === "average" || definition.op === "avg") return values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0;
+      if (definition.op === "min") return values.length ? Math.min(...values) : 0;
+      if (definition.op === "max") return values.length ? Math.max(...values) : 0;
+      throw new AirError(`unknown computed operation \`${definition.op}\``);
+    } finally {
+      this._computationStack.delete(stackKey);
+    }
   }
 
   enrichRecord(resourceId, record) {
     const resource = this.model.entities.get(resourceId);
     if (!resource) throw new AirError(`unknown resource \`${resourceId}\``);
     const enriched = structuredClone(record);
-    for (const field of resource.fields.filter((candidate) => candidate.computed)) enriched[field.id] = this.computedValue(field, record, resourceId);
+    for (const field of resource.fields) {
+      if (field.computed) {
+        enriched[field.id] = this.computedValue(field, record, resourceId);
+      } else if (field.type === "ratio" && enriched[field.id] != null) {
+        enriched[field.id] = parseRatioOrPercentLiteral(enriched[field.id]);
+      }
+    }
     return enriched;
   }
 
@@ -3167,33 +4616,76 @@ export class AppRuntime {
   displayValue(resourceId, fieldId, value) {
     if (isBlank(value)) return "—";
     const field = this.model.entities.get(resourceId)?.fieldMap.get(fieldId);
-    if (!field) return String(value);
-    if (field.type === "ref") {
+    if (value instanceof MoneyRate) {
+      const formatted = new Intl.NumberFormat("en", { style: "currency", currency: value.currency }).format(value.amount);
+      return `${formatted}/${value.unit}`;
+    }
+    if (value instanceof Ratio || field?.type === "ratio") {
+      const r = parseRatioOrPercentLiteral(value);
+      return r ? r.toString() : String(value);
+    }
+    if (field?.type === "integer") {
+      const num = Number(value);
+      return Number.isSafeInteger(num) ? new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(num) : String(value);
+    }
+    if (value instanceof Duration) {
+      return value.toString();
+    }
+    if (field?.type === "ref") {
       const target = this.model.entities.get(field.ref);
       const record = this.records(field.ref).find((item) => item.id === value);
       if (!record) return "Missing record";
       if (this.model.management.has(field.ref) && !this.can(field.ref, "view", record)) return "Restricted record";
       return String(record[target.labelField] ?? record.id);
     }
-    if (field.type === "bool") return value ? "Yes" : "No";
-    if (field.type === "money") return new Intl.NumberFormat("en", { style: "currency", currency: field.currency }).format(value);
-    if (field.type === "rate") {
+    if (field?.type === "bool") return value ? "Yes" : "No";
+    if (field?.type === "money" || (typeof value === "object" && value !== null && value.currency && value.amount !== undefined)) {
+      const cur = field?.currency ?? value?.currency ?? "USD";
+      const amt = typeof value === "object" && value !== null ? value.amount : value;
+      return new Intl.NumberFormat("en", { style: "currency", currency: cur }).format(amt);
+    }
+    if (field?.type === "rate") {
       const formatted = new Intl.NumberFormat("en", { style: "currency", currency: field.currency }).format(value);
       return `${formatted}/${field.unit}`;
     }
-    if (field.type === "duration") {
-      if (value instanceof Duration) return value.toString();
+    if (field?.type === "duration") {
       const dur = parseDurationLiteral(value);
       if (dur) return dur.toString();
       return String(value);
     }
-    if (field.type === "date") {
+    if (field?.type === "interval" || (typeof value === "object" && value !== null && value.start && value.end)) {
+      const s = String(value.start ?? "");
+      const e = String(value.end ?? "");
+      const sDate = s ? new Date(s.includes("T") ? s : `${s}T00:00:00Z`) : null;
+      const eDate = e ? new Date(e.includes("T") ? e : `${e}T00:00:00Z`) : null;
+      if (sDate && !Number.isNaN(sDate.valueOf()) && eDate && !Number.isNaN(eDate.valueOf())) {
+        const isSameDay = s.slice(0, 10) === e.slice(0, 10);
+        const df = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+        const tf = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "numeric", timeZone: "UTC", hour12: false });
+        if (s.includes("T") && e.includes("T")) {
+          if (isSameDay) {
+            return `${df.format(sDate)} · ${tf.format(sDate)}–${tf.format(eDate)}`;
+          }
+          return `${df.format(sDate)} ${tf.format(sDate)} → ${df.format(eDate)} ${tf.format(eDate)}`;
+        }
+        if (isSameDay) {
+          return df.format(sDate);
+        }
+        return `${df.format(sDate)} → ${df.format(eDate)}`;
+      }
+      return `${s} → ${e}`;
+    }
+    if (field?.type === "date") {
       const date = new Date(`${value}T00:00:00Z`);
       if (!Number.isNaN(date.valueOf())) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
     }
-    if (field.type === "datetime") {
+    if (field?.type === "datetime") {
       const date = new Date(value);
       if (!Number.isNaN(date.valueOf())) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "numeric", timeZone: "UTC" }).format(date);
+    }
+    if (typeof value === "object" && value !== null) {
+      if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
+      return Object.entries(value).map(([k, v]) => `${k}: ${v}`).join(", ");
     }
     return String(value);
   }
@@ -3413,7 +4905,7 @@ export function semanticIr(input) {
         id: field.id, type: field.type, label: field.label,
         required: field.required, unique: field.unique,
         values: [...field.values], ref: field.ref ?? null,
-        default: field.default ?? null, min: field.min,
+        default: field.default ?? null, min: field.min ?? 0,
         placeholder: field.placeholder, long: field.long,
         currency: field.currency ?? null,
         computed: canonicalComputed(field.computed),
